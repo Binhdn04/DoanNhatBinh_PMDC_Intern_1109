@@ -34,7 +34,11 @@ Trong đó, **3 module cốt lõi** được chọn để thiết kế UI/UX và
 - **UI/UX prototype**: Figma
 - **Database design**: DBdiagram
 
-Để chạy phần UI/UX, giải nén `InternHub.zip` sau đó chạy lần lượt các lệnh sau:
+### Quick start
+Để xem UI/UX, chạy lần lượt các lệnh sau:
+```bash
+cd InternHub
+```
 
 ```bash
 npm install
