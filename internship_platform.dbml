@@ -1,0 +1,273 @@
+// =========================================================
+// Smart Internship Management - Database Schema (DBML)
+// View at https://dbdiagram.io
+// =========================================================
+
+// ---------- Core identity ----------
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email varchar [unique, not null]
+  password_hash varchar [not null]
+  role user_role [not null]
+  full_name varchar [not null]
+  avatar_url varchar
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Enum user_role {
+  student
+  supervisor
+  admin
+}
+
+Table students {
+  id uuid [pk, ref: - users.id]
+  university varchar
+  major varchar
+  graduation_year int
+  bio text
+  cv_url varchar
+  resume_updated_at timestamp
+}
+
+Table companies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar [not null]
+  logo_url varchar
+  website varchar
+  industry varchar
+  description text
+  created_at timestamp [default: `now()`]
+}
+
+Table supervisors {
+  id uuid [pk, ref: - users.id]
+  company_id uuid [not null, ref: > companies.id]
+  title varchar
+  department varchar
+}
+
+// ---------- 1. Internship Discovery & Matching ----------
+
+Table skills {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar [unique, not null]
+  category varchar
+}
+
+Table student_skills {
+  student_id uuid [ref: > students.id]
+  skill_id uuid [ref: > skills.id]
+  proficiency proficiency_level [default: 'intermediate']
+  source skill_source [default: 'self_reported']
+
+  Indexes {
+    (student_id, skill_id) [pk]
+  }
+}
+
+Enum proficiency_level {
+  beginner
+  intermediate
+  advanced
+}
+
+Enum skill_source {
+  self_reported
+  cv_extracted
+  verified
+}
+
+Table internships {
+  id uuid [pk, default: `gen_random_uuid()`]
+  company_id uuid [not null, ref: > companies.id]
+  supervisor_id uuid [ref: > supervisors.id]
+  title varchar [not null]
+  description text
+  category varchar
+  location varchar
+  work_mode work_mode [default: 'onsite']
+  duration_months int
+  openings int [default: 1]
+  status internship_status [default: 'open']
+  search_vector tsvector // for keyword search
+  published_at timestamp
+  application_deadline timestamp
+  created_at timestamp [default: `now()`]
+
+  Indexes {
+    (category, location)
+    search_vector [type: gin]
+  }
+}
+
+Enum work_mode {
+  onsite
+  remote
+  hybrid
+}
+
+Enum internship_status {
+  draft
+  open
+  closed
+  archived
+}
+
+Table internship_skills {
+  internship_id uuid [ref: > internships.id]
+  skill_id uuid [ref: > skills.id]
+  required boolean [default: true] // false = "nice to have"
+
+  Indexes {
+    (internship_id, skill_id) [pk]
+  }
+}
+
+Table match_scores {
+  id uuid [pk, default: `gen_random_uuid()`]
+  student_id uuid [not null, ref: > students.id]
+  internship_id uuid [not null, ref: > internships.id]
+  score decimal(5,2) [not null] // 0-100
+  matched_skills jsonb // ["Figma", "Prototyping"]
+  missing_skills jsonb // ["Usability testing"]
+  explanation text // "Why this matches you" LLM output
+  computed_at timestamp [default: `now()`]
+
+  Indexes {
+    (student_id, internship_id) [unique]
+  }
+}
+
+// ---------- 2. Internship Application Management ----------
+
+Table applications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  student_id uuid [not null, ref: > students.id]
+  internship_id uuid [not null, ref: > internships.id]
+  cover_note text
+  availability varchar
+  status application_status [default: 'submitted']
+  submitted_at timestamp [default: `now()`]
+  updated_at timestamp
+
+  Indexes {
+    (student_id, internship_id) [unique]
+  }
+}
+
+Enum application_status {
+  submitted
+  under_review
+  interview
+  accepted
+  rejected
+  withdrawn
+}
+
+Table application_status_history {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, ref: > applications.id]
+  from_status application_status
+  to_status application_status [not null]
+  changed_by uuid [ref: > users.id]
+  note text
+  changed_at timestamp [default: `now()`]
+}
+
+Table application_documents {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, ref: > applications.id]
+  doc_type document_type [not null]
+  file_url varchar [not null]
+  file_name varchar
+  uploaded_at timestamp [default: `now()`]
+}
+
+Enum document_type {
+  cv
+  cover_letter
+  portfolio
+  transcript
+  other
+}
+
+Table ai_interviews {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, ref: - applications.id]
+  status interview_status [default: 'pending']
+  transcript jsonb // array of {question, answer}
+  ai_score decimal(5,2)
+  ai_summary text
+  started_at timestamp
+  completed_at timestamp
+}
+
+Enum interview_status {
+  pending
+  in_progress
+  completed
+  expired
+}
+
+// ---------- 3. Internship Progress Management ----------
+
+Table internship_placements {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, ref: - applications.id]
+  student_id uuid [not null, ref: > students.id]
+  internship_id uuid [not null, ref: > internships.id]
+  supervisor_id uuid [ref: > supervisors.id]
+  start_date date
+  end_date date
+  placement_status placement_status [default: 'active']
+}
+
+Enum placement_status {
+  active
+  completed
+  terminated
+}
+
+Table tasks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: > internship_placements.id]
+  assigned_by uuid [ref: > supervisors.id]
+  title varchar [not null]
+  description text
+  status task_status [default: 'todo']
+  due_date date
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Enum task_status {
+  todo
+  in_progress
+  done
+}
+
+Table weekly_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: > internship_placements.id]
+  week_start date [not null]
+  week_end date [not null]
+  content text [not null] // student's raw report
+  ai_summary text // LLM-generated summary
+  submitted_at timestamp [default: `now()`]
+
+  Indexes {
+    (placement_id, week_start) [unique]
+  }
+}
+
+Table report_feedback {
+  id uuid [pk, default: `gen_random_uuid()`]
+  report_id uuid [not null, ref: > weekly_reports.id]
+  supervisor_id uuid [not null, ref: > supervisors.id]
+  comment text [not null]
+  rating int // optional 1-5
+  created_at timestamp [default: `now()`]
+}
