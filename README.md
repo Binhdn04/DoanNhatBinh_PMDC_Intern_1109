@@ -59,5 +59,7 @@ npm run dev
 To view and interact with the UI/UX prototype without downloading the code, visit the [Figma prototype](https://www.figma.com/make/G0R3nUP0L3fwgNQLG8RidV/Continue-InternHub-Development?t=8YxBoaR5xPYa230r-20&fullscreen=1).
 
 - [Top-down approach](./Topdown_approach.png) — Top-down analysis exported from XMind.
+- [Feature Spec](./spec.md)
+- [Use case diagram](./use_case.png)
 - [Database design](./database_design.png) — Database design for the three core modules.
 - [InternHub](./InternHub/) — Source code and instructions for running the UI/UX prototype.
