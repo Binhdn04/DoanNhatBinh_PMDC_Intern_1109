@@ -60,6 +60,7 @@ To view and interact with the UI/UX prototype without downloading the code, visi
 
 - [Top-down approach](./Topdown_approach.png) — Top-down analysis exported from XMind.
 - [Feature Spec](./spec.md)
-- [Use case diagram](./use_case.png)
+- [Core Features – Use Case Diagram](./use_case.png)
+- [Full Features – Use Case Diagram](./use_case_full.png)
 - [Database design](./database_design.png) — Database design for the three core modules.
 - [InternHub](./InternHub/) — Source code and instructions for running the UI/UX prototype.
