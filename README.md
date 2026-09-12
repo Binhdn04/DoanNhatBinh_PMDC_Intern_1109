@@ -1,13 +1,19 @@
-Họ tên: Đoàn Nhật Bình  
-Bài tập ngày 11/09: Chọn chủ đề và phân tích phần mềm đã chọn với top down approach, sau đó chọn ra các tính năng quan trọng nhất để làm UI/UX và database design  
+# InternHub — Smart Internship Management System
 
-## Giới thiệu phần mềm: InternHub — Smart Internship Management System
+**Author:** Doan Nhat Binh  
+**Assignment:** Topic selection and software analysis using a top-down approach, followed by selecting the most important features for UI/UX and database design.
 
-### Bài toán
-Sinh viên gặp khó khăn khi tìm kiếm việc thực tập phù hợp với năng lực bản thân, và thiếu một nền tảng tập trung để theo dõi trạng thái ứng tuyển, và duy trì kết nối minh bạch với công ty/giảng viên hướng dẫn trong suốt quá trình thực tập. InternHub được thiết kế để giải quyết các điểm nghẽn này thông qua một nền tảng tập trung.
+## Software Overview
 
-### Phạm vi phân tích (Top-down approach)
-Phần mềm được phân tích theo mô hình 3 lớp, gồm 6 module chính:
+InternHub is a centralized platform designed to help students find suitable internships, track application progress, and maintain transparent communication with companies and academic supervisors throughout the internship.
+
+### Problem Statement
+
+Students often struggle to find internships that match their skills and lack a centralized platform for tracking application status and maintaining clear communication with companies and supervisors. InternHub is designed to address these challenges in one platform.
+
+### Analysis Scope (Top-down Approach)
+
+The software is analyzed using a three-layer model and consists of six main modules:
 
 1. Internship Discovery & Matching
 2. Internship Application Management
@@ -16,38 +22,42 @@ Phần mềm được phân tích theo mô hình 3 lớp, gồm 6 module chính:
 5. User & Internship Organization
 6. Internship Monitoring & Reporting
 
-Trong đó, **3 module cốt lõi** được chọn để thiết kế UI/UX và database:
+The **three core modules** selected for UI/UX and database design are:
 
-- **Internship Discovery & Matching** — tìm kiếm, lọc, và gợi ý thực tập dựa trên mức độ phù hợp kỹ năng (Match Score), có giải thích gợi ý (Recommendation Explanation) bằng AI.
-- **Internship Application Management** — nộp hồ sơ ứng tuyển và theo dõi trạng thái xử lý theo thời gian thực.
-- **Internship Progress Management** — quản lý task được giao và báo cáo tiến độ hàng tuần giữa sinh viên và supervisor.
+- **Internship Discovery & Matching** — search, filter, and receive internship recommendations based on skill compatibility (Match Score), with AI-assisted recommendation explanations.
+- **Internship Application Management** — submit applications and track their processing status in real time.
+- **Internship Progress Management** — manage assigned tasks and weekly progress reports between students and supervisors.
 
-3 module còn lại (Evaluation, Organization, Monitoring & Reporting) được giữ trong mindmap như định hướng phát triển tương lai, không nằm trong phạm vi build UI/UX và database lần này.
+### The Three Supporting Modules
 
-### Ứng dụng AI
-- **Match Score**: tính bằng công thức trọng số (không dùng AI) để đảm bảo minh bạch, có thể giải thích được.
-- **Recommendation Explanation**: dùng LLM để diễn giải kết quả match một cách tự nhiên.
-- **Search**: kiến trúc đề xuất là hybrid search (keyword + semantic embedding), hiện tại bản UI/UX sử dụng keyword search, semantic search là phần mở rộng.
+- **Internship Evaluation** — standardizes internship evaluation through self-assessment, learning outcomes, supervisor ratings, final score calculation, and completion decisions. This module supports academic assessment, credit calculation, and internship certification.
+- **User & Internship Organization** — manages identities, profiles, and permissions across the system. It includes student profiles, skills and preferences, company profiles, internship postings, and Student, Supervisor, and Admin roles. This module provides the foundation for the discovery, application, and progress modules.
+- **Internship Monitoring & Reporting** — provides an overview for universities, administrators, and companies through progress dashboards, application statistics, deadline reminders, status notifications, internship statistics, and consolidated performance reports.
 
-### Công cụ sử dụng
-- **Mindmap**: XMind
-- **UI/UX prototype**: Figma
-- **Database design**: DBdiagram
+### AI Usage
 
-### Quick start
-Để xem UI/UX, chạy lần lượt các lệnh sau:
+- **Match Score:** calculated using a weighted formula without AI to ensure transparency and explainability.
+- **Recommendation Explanation:** uses an LLM to explain match results in natural language.
+- **Search:** the proposed architecture is hybrid search (keyword + semantic embedding). The current UI/UX prototype uses keyword search, while semantic search is planned as an extension.
+
+### Tools
+
+- **Mindmap:** XMind
+- **UI/UX prototype:** Figma
+- **Database design:** DBdiagram
+
+### Quick Start
+
+To run the UI/UX prototype locally:
+
 ```bash
 cd InternHub
-```
-
-```bash
 npm install
-```
-
-```bash
 npm run dev
 ```
-Để xem và tương tác với UI/UX của phần mềm mà không cần download code, anh có thể truy cập vào link: https://www.figma.com/make/G0R3nUP0L3fwgNQLG8RidV/Continue-InternHub-Development?t=8YxBoaR5xPYa230r-20&fullscreen=1
 
-- [Top-down approach](./Topdown_approach.png) — Phân tích top-down được export từ XMind.
-- [Database design](./database_design.png) — Thiết kế database của 3 module cốt lõi.
+To view and interact with the UI/UX prototype without downloading the code, visit the [Figma prototype](https://www.figma.com/make/G0R3nUP0L3fwgNQLG8RidV/Continue-InternHub-Development?t=8YxBoaR5xPYa230r-20&fullscreen=1).
+
+- [Top-down approach](./Topdown_approach.png) — Top-down analysis exported from XMind.
+- [Database design](./database_design.png) — Database design for the three core modules.
+- [InternHub](./InternHub/) — Source code and instructions for running the UI/UX prototype.
