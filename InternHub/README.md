@@ -24,14 +24,14 @@ The current application uses mock data defined in the frontend for UI/UX and int
 Make sure Node.js and pnpm are installed.
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm dev
 ```
 
 Open the local address displayed by Vite in the terminal. To create a production build:
 
 ```bash
-pnpm build
+npm build
 ```
 
 ## Main Structure
