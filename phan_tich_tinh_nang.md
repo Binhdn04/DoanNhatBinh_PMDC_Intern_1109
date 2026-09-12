@@ -84,3 +84,49 @@ Từ 6 module Layer 1, 3 module được đánh giá là **giải quyết trực
 - Output: Kanban view cho task, timeline view cho report + feedback
 
 ---
+
+### 3. Phân tích 3 module còn lại
+
+#### 3.1. Internship Evaluation
+
+**Mục tiêu**: Chuẩn hóa quy trình đánh giá kết quả thực tập, làm căn cứ tính điểm/công nhận tín chỉ.
+
+| Tính năng con | Mô tả | Cần thiết? |
+|---|---|---|
+| Self Assessment | Sinh viên tự đánh giá quá trình thực tập của mình | Cần thiết cho mục đích học thuật, không phải core UX |
+| Learning Outcome | Ghi nhận kỹ năng/kiến thức đạt được sau kỳ thực tập | Hữu ích cho báo cáo nhà trường |
+| Performance Rating | Supervisor chấm điểm hiệu suất sinh viên | Cần thiết nếu có tính điểm chính thức |
+| Overall Score | Tổng hợp điểm cuối kỳ | Cần thiết nếu có tính tín chỉ |
+| Completion Decision | Quyết định đạt/không đạt thực tập | Cần thiết cho mục đích học thuật |
+
+---
+
+#### 3.2. User & Internship Organization
+
+**Mục tiêu**: Quản lý danh tính, hồ sơ, và phân quyền cho toàn hệ thống.
+
+| Tính năng con | Mô tả | Cần thiết? |
+|---|---|---|
+| Student Profile | Thông tin cá nhân, học vấn của sinh viên | Bắt buộc — nhưng là nền tảng (đã ngầm định cần có để 3 module core hoạt động) |
+| Skills & Preferences | Danh sách kỹ năng, sở thích ngành nghề | Bắt buộc — chính là input cho Match Score ở module Discovery |
+| Company Profile | Thông tin công ty | Bắt buộc — nền tảng cho Internship Posting |
+| Internship Posting | Công ty đăng tin tuyển thực tập | Bắt buộc — nguồn dữ liệu cho Search & Filter |
+| Student Role | Phân quyền cho tài khoản sinh viên | Cần thiết về mặt hệ thống |
+| Supervisor/Admin Role | Phân quyền cho supervisor/admin | Cần thiết về mặt hệ thống |
+
+---
+
+#### 3.3. Internship Monitoring & Reporting
+
+**Mục tiêu**: Cung cấp góc nhìn tổng quan (dashboard, thống kê) cho vai trò quản lý — nhà trường, admin hệ thống.
+
+| Tính năng con | Mô tả | Cần thiết? |
+|---|---|---|
+| Progress Overview | Dashboard tổng quan tiến độ thực tập của toàn bộ sinh viên | Hữu ích cho admin, không phải sinh viên |
+| Application Overview | Thống kê tổng số đơn ứng tuyển, tỷ lệ trúng tuyển | Hữu ích cho công ty/admin ra quyết định |
+| Deadline Reminder | Nhắc hạn nộp đơn, hạn báo cáo | Có giá trị UX cao, dễ triển khai bằng notification đơn giản |
+| Status Notification | Thông báo khi trạng thái đơn/task thay đổi | Có giá trị UX cao, tăng engagement |
+| Internship Statistics | Số liệu thống kê theo ngành, theo kỳ | Chỉ cần khi có đủ dữ liệu lịch sử |
+| Performance Reports | Báo cáo hiệu suất tổng hợp | Dành cho admin/nhà trường |
+
+---
