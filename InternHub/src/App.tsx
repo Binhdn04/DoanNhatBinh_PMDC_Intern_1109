@@ -10,8 +10,12 @@ type Screen =
   | 'interview-result'
   | 'applications'
   | 'internship'
+  | 'reports'
   | 'weekly-report'
   | 'supervisor-review'
+  | 'evaluation'
+  | 'profile-org'
+  | 'admin-dashboard'
   | 'profile';
 
 interface Internship {
@@ -319,9 +323,19 @@ const NAV_ITEMS = [
       <path d="M3 14V8l6-5 6 5v6M7 16v-5h4v5"/>
     </svg>
   )},
-  { id: 'profile', label: 'Profile', icon: (
+  { id: 'evaluation', label: 'Evaluation', icon: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2L10.5 6.5H15.5L11.5 9.5L13 14L9 11.5L5 14L6.5 9.5L2.5 6.5H7.5L9 2Z"/>
+    </svg>
+  )},
+  { id: 'profile-org', label: 'Profile', icon: (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="9" cy="6" r="3"/><path d="M3 16c0-3.314 2.686-5 6-5s6 1.686 6 5"/>
+    </svg>
+  )},
+  { id: 'admin-dashboard', label: 'Admin', icon: (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="10" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="10" width="6" height="6" rx="1.5"/><rect x="10" y="10" width="6" height="6" rx="1.5"/>
     </svg>
   )},
 ];
@@ -332,7 +346,9 @@ function Sidebar({ activeScreen, onNavigate }: { activeScreen: Screen; onNavigat
     if (s === 'applications' && (activeScreen === 'applications' || activeScreen === 'interview' || activeScreen === 'interview-result')) return true;
     if (s === 'internship' && (activeScreen === 'internship' || activeScreen === 'weekly-report' || activeScreen === 'supervisor-review')) return true;
     if (s === 'reports' && activeScreen === 'reports') return true;
-    if (s === 'profile' && activeScreen === 'profile') return true;
+    if (s === 'evaluation' && activeScreen === 'evaluation') return true;
+    if (s === 'profile-org' && (activeScreen === 'profile-org' || activeScreen === 'profile')) return true;
+    if (s === 'admin-dashboard' && activeScreen === 'admin-dashboard') return true;
     return false;
   };
 
@@ -1959,6 +1975,662 @@ function SupervisorReviewScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ─── Screen 10: Internship Evaluation ────────────────────────────────────────
+
+type CompletionDecision = 'Passed' | 'Failed' | 'Pending';
+
+function RatingRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="text-sm text-slate-700 w-40 shrink-0">{label}</span>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map(star => (
+          <button
+            key={star}
+            onClick={() => onChange(star)}
+            className={`w-7 h-7 rounded-lg transition-all text-sm ${star <= value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+          >
+            {star}
+          </button>
+        ))}
+      </div>
+      <span className="text-xs text-slate-400 ml-1">
+        {value === 1 ? 'Poor' : value === 2 ? 'Fair' : value === 3 ? 'Good' : value === 4 ? 'Very Good' : 'Excellent'}
+      </span>
+    </div>
+  );
+}
+
+function EvaluationScreen() {
+  const [selfRatings, setSelfRatings] = useState({ workQuality: 4, teamwork: 4, communication: 3, initiative: 4, punctuality: 5 });
+  const [supRatings, setSupRatings] = useState({ workQuality: 4, teamwork: 5, communication: 4, initiative: 3, punctuality: 5 });
+  const [outcomes, setOutcomes] = useState<Record<string, boolean>>({
+    'Applied ML techniques to real problems': true,
+    'Deployed a production-ready API': true,
+    'Collaborated in an agile team': true,
+    'Used industry-standard tools (Git, Docker, CI/CD)': true,
+    'Presented technical findings to stakeholders': false,
+    'Wrote technical documentation': true,
+  });
+  const [decision, setDecision] = useState<CompletionDecision>('Passed');
+  const [submitted, setSubmitted] = useState(false);
+
+  const selfAvg = Math.round(Object.values(selfRatings).reduce((a, b) => a + b, 0) / Object.values(selfRatings).length * 20);
+  const supAvg = Math.round(Object.values(supRatings).reduce((a, b) => a + b, 0) / Object.values(supRatings).length * 20);
+  const overallScore = Math.round((selfAvg + supAvg) / 2);
+
+  const decisionStyle: Record<CompletionDecision, string> = {
+    Passed: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    Failed: 'bg-red-50 border-red-200 text-red-700',
+    Pending: 'bg-amber-50 border-amber-200 text-amber-700',
+  };
+  const decisionDot: Record<CompletionDecision, string> = {
+    Passed: 'bg-emerald-500', Failed: 'bg-red-500', Pending: 'bg-amber-500',
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-8 py-5 bg-white border-b border-slate-200 shrink-0 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>Internship Evaluation</h1>
+          <p className="text-sm text-slate-500 mt-0.5">AI Engineer Intern · FPT Software · Jun 01 – Aug 31, 2026</p>
+        </div>
+        {submitted && (
+          <span className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M2 6l3 3 5-5"/></svg>
+            Evaluation submitted
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="max-w-4xl mx-auto flex flex-col gap-5">
+
+          {/* Overall score hero */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 flex items-center gap-8">
+            <div className="relative shrink-0">
+              <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
+                <circle cx="48" cy="48" r="40" fill="none" stroke="#e2e8f0" strokeWidth="8"/>
+                <circle cx="48" cy="48" r="40" fill="none" stroke="#2563eb" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 40 * overallScore / 100} ${2 * Math.PI * 40 * (1 - overallScore / 100)}`}
+                  strokeLinecap="round"/>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-slate-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>{overallScore}</span>
+                <span className="text-[10px] text-slate-500">/ 100</span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Overall Evaluation Score</p>
+              <div className="flex gap-6 mb-3">
+                {[{ label: 'Self-Assessment', value: selfAvg, color: '#7c3aed' }, { label: 'Supervisor Rating', value: supAvg, color: '#2563eb' }].map(item => (
+                  <div key={item.label}>
+                    <p className="text-xs text-slate-500 mb-1">{item.label}</p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-28 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${item.value}%`, background: item.color }} />
+                      </div>
+                      <span className="text-sm font-bold" style={{ color: item.color }}>{item.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Completion decision */}
+            <div className="flex flex-col gap-2 shrink-0">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Completion</p>
+              <div className="flex gap-2">
+                {(['Passed', 'Failed', 'Pending'] as CompletionDecision[]).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setDecision(d)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${decision === d ? decisionStyle[d] : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${decision === d ? decisionDot[d] : 'bg-slate-300'}`} />
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-5">
+            {/* Student self-assessment */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-violet-50 border border-violet-100 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#7c3aed" strokeWidth="1.75" strokeLinecap="round"><circle cx="6" cy="4" r="2"/><path d="M2 10c0-2.2 1.79-3.5 4-3.5s4 1.3 4 3.5"/></svg>
+                </div>
+                <h2 className="text-sm font-semibold text-slate-900">Student Self-Assessment</h2>
+                <span className="ml-auto text-xs font-bold text-violet-700">{selfAvg}/100</span>
+              </div>
+              <div className="px-5 py-4 flex flex-col gap-3">
+                {(Object.keys(selfRatings) as (keyof typeof selfRatings)[]).map(key => (
+                  <RatingRow
+                    key={key}
+                    label={key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                    value={selfRatings[key]}
+                    onChange={v => setSelfRatings(r => ({ ...r, [key]: v }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Supervisor rating */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#2563eb" strokeWidth="1.75" strokeLinecap="round"><rect x="1" y="2" width="10" height="8" rx="1.5"/><path d="M4 10v1.5M8 10v1.5"/></svg>
+                </div>
+                <h2 className="text-sm font-semibold text-slate-900">Supervisor Performance Rating</h2>
+                <span className="ml-auto text-xs font-bold text-blue-700">{supAvg}/100</span>
+              </div>
+              <div className="px-5 py-4 flex flex-col gap-3">
+                {(Object.keys(supRatings) as (keyof typeof supRatings)[]).map(key => (
+                  <RatingRow
+                    key={key}
+                    label={key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                    value={supRatings[key]}
+                    onChange={v => setSupRatings(r => ({ ...r, [key]: v }))}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Learning outcomes */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#059669" strokeWidth="1.75" strokeLinecap="round"><path d="M2 6l3 3 5-5"/></svg>
+              </div>
+              <h2 className="text-sm font-semibold text-slate-900">Learning Outcomes</h2>
+              <span className="ml-auto text-xs text-slate-500">{Object.values(outcomes).filter(Boolean).length}/{Object.keys(outcomes).length} achieved</span>
+            </div>
+            <div className="px-5 py-4 grid grid-cols-2 gap-3">
+              {Object.entries(outcomes).map(([label, checked]) => (
+                <label key={label} className="flex items-start gap-3 cursor-pointer group">
+                  <div
+                    onClick={() => setOutcomes(o => ({ ...o, [label]: !o[label] }))}
+                    className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${checked ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 group-hover:border-emerald-400'}`}
+                  >
+                    {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M2 5l2 2 4-4"/></svg>}
+                  </div>
+                  <span className={`text-sm leading-snug transition-colors ${checked ? 'text-slate-800' : 'text-slate-400'}`}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit */}
+          <div className="flex items-center justify-end gap-3 pb-2">
+            <Button variant="secondary">Save Draft</Button>
+            <Button size="lg" onClick={() => setSubmitted(true)}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M2 7l3.5 3.5L12 4"/></svg>
+              Submit Evaluation
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen 11: Profile & Organization ───────────────────────────────────────
+
+type ProfileTab = 'Profile' | 'Skills & Preferences' | 'Organization';
+
+const SKILL_TAGS = ['Python', 'Machine Learning', 'TensorFlow', 'Computer Vision', 'Git', 'FastAPI', 'Docker', 'PyTorch', 'SQL', 'Linux'];
+const PREFERRED_INDUSTRIES = ['AI / Machine Learning', 'Technology', 'Research', 'Fintech'];
+const PREFERRED_LOCATIONS = ['Hanoi', 'Remote', 'Ho Chi Minh City'];
+
+function ProfileOrgScreen() {
+  const [tab, setTab] = useState<ProfileTab>('Profile');
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-8 py-5 bg-white border-b border-slate-200 shrink-0">
+        <h1 className="text-2xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>Profile & Organization</h1>
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+          {(['Profile', 'Skills & Preferences', 'Organization'] as ProfileTab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="max-w-3xl mx-auto flex flex-col gap-5">
+
+          {tab === 'Profile' && (
+            <>
+              {/* Avatar + name */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 flex items-center gap-5">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shrink-0">BD</div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>Binh Do</h2>
+                  <p className="text-sm text-slate-500">Computer Science · HUST Class of 2025</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">Student</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">Active Intern</span>
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm">Edit Profile</Button>
+              </div>
+
+              {/* Personal info */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="text-sm font-semibold text-slate-900">Personal Information</h3>
+                </div>
+                <div className="px-5 py-5 grid grid-cols-2 gap-4">
+                  {[
+                    { label: 'Full Name', value: 'Binh Do' },
+                    { label: 'Email', value: 'binh.do@sis.hust.edu.vn' },
+                    { label: 'Phone', value: '+84 98 765 4321' },
+                    { label: 'University', value: 'Hanoi University of Science and Technology' },
+                    { label: 'Major', value: 'Computer Science' },
+                    { label: 'Expected Graduation', value: 'May 2025' },
+                    { label: 'GPA', value: '3.72 / 4.00' },
+                    { label: 'Student ID', value: 'HUST-20200462' },
+                  ].map(item => (
+                    <div key={item.label}>
+                      <p className="text-xs text-slate-500 mb-0.5">{item.label}</p>
+                      <p className="text-sm font-medium text-slate-900">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Profile completeness */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4 flex items-center gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">Profile completeness</p>
+                  <div className="h-2 rounded-full bg-blue-200 overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-600" style={{ width: '84%' }} />
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">84% — Add a portfolio link to reach 100%</p>
+                </div>
+                <span className="text-2xl font-bold text-blue-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>84%</span>
+              </div>
+            </>
+          )}
+
+          {tab === 'Skills & Preferences' && (
+            <>
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-900">Technical Skills</h3>
+                  <Button variant="ghost" size="sm">+ Add skill</Button>
+                </div>
+                <div className="px-5 py-4 flex flex-wrap gap-2">
+                  {SKILL_TAGS.map(s => (
+                    <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-50 text-slate-700 border border-slate-200 group hover:border-red-200 hover:bg-red-50 transition-all cursor-default">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="text-sm font-semibold text-slate-900">Internship Preferences</h3>
+                </div>
+                <div className="px-5 py-5 grid grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Preferred Industries</p>
+                    <div className="flex flex-col gap-2">
+                      {PREFERRED_INDUSTRIES.map(ind => (
+                        <div key={ind} className="flex items-center gap-2 text-sm text-slate-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />{ind}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Preferred Locations</p>
+                    <div className="flex flex-col gap-2">
+                      {PREFERRED_LOCATIONS.map(loc => (
+                        <div key={loc} className="flex items-center gap-2 text-sm text-slate-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />{loc}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Work Type</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['Full-time', 'Remote'].map(t => (
+                        <span key={t} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Duration</p>
+                    <p className="text-sm text-slate-700">3–6 months</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="text-sm font-semibold text-slate-900">Documents</h3>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3">
+                  {[
+                    { name: 'Binh_Do_CV.pdf', type: 'CV', size: '2.4 MB', updated: 'Sep 1, 2026' },
+                    { name: 'Portfolio_2026.pdf', type: 'Portfolio', size: '5.1 MB', updated: 'Aug 20, 2026' },
+                  ].map(doc => (
+                    <div key={doc.name} className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+                      <div className="w-9 h-9 rounded-lg bg-red-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">PDF</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{doc.name}</p>
+                        <p className="text-xs text-slate-500">{doc.type} · {doc.size} · Updated {doc.updated}</p>
+                      </div>
+                      <Button variant="ghost" size="sm">Replace</Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === 'Organization' && (
+            <>
+              {/* Company profile */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold" style={{ background: '#f97316' }}>FP</div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">FPT Software</h3>
+                    <p className="text-xs text-slate-500">Technology / IT Services</p>
+                  </div>
+                </div>
+                <div className="px-5 py-5 grid grid-cols-3 gap-4">
+                  {[
+                    { label: 'Industry', value: 'Technology / IT Services' },
+                    { label: 'Headcount', value: '35,000+' },
+                    { label: 'Location', value: 'Hanoi, Vietnam' },
+                    { label: 'Founded', value: '1999' },
+                    { label: 'Website', value: 'fpt-software.com' },
+                    { label: 'Contact', value: 'hr@fpt-software.com' },
+                  ].map(item => (
+                    <div key={item.label}>
+                      <p className="text-xs text-slate-500 mb-0.5">{item.label}</p>
+                      <p className="text-sm font-medium text-slate-900">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-5 pb-5">
+                  <p className="text-xs text-slate-500 mb-1.5">About</p>
+                  <p className="text-sm text-slate-700 leading-relaxed">FPT Software is one of Southeast Asia's largest IT services companies, serving 1,000+ clients across 30 countries. Our AI division focuses on applied machine learning, computer vision, and NLP.</p>
+                </div>
+              </div>
+
+              {/* Internship posting */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="text-sm font-semibold text-slate-900">Internship Posting</h3>
+                </div>
+                <div className="px-5 py-5 grid grid-cols-2 gap-4">
+                  {[
+                    { label: 'Position', value: 'AI Engineer Intern' },
+                    { label: 'Status', value: 'Active' },
+                    { label: 'Posted', value: 'Nov 1, 2026' },
+                    { label: 'Deadline', value: 'Dec 31, 2026' },
+                    { label: 'Duration', value: '3 months' },
+                    { label: 'Stipend', value: '8M–12M VND/month' },
+                    { label: 'Applicants', value: '143' },
+                    { label: 'Interviews sent', value: '28' },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                      <span className="text-xs text-slate-500">{item.label}</span>
+                      <span className={`text-sm font-medium ${item.label === 'Status' ? 'text-emerald-700' : 'text-slate-900'}`}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Account role */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="text-sm font-semibold text-slate-900">Account & Role</h3>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3">
+                  {[
+                    { role: 'Student', desc: 'Binh Do — can apply, complete interviews, submit reports', active: true },
+                    { role: 'Supervisor', desc: 'Nguyen Van A — can review reports and evaluate interns', active: false },
+                    { role: 'Admin', desc: 'University Coordinator — can monitor all internships', active: false },
+                  ].map(item => (
+                    <div key={item.role} className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all ${item.active ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${item.active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        {item.role[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold ${item.active ? 'text-blue-900' : 'text-slate-700'}`}>{item.role}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
+                      </div>
+                      {item.active && <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full shrink-0">Current</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen 12: Admin Dashboard ───────────────────────────────────────────────
+
+const ADMIN_INTERNSHIPS = [
+  { student: 'Binh Do', company: 'FPT Software', role: 'AI Engineer Intern', status: 'Active', progress: 72, week: 4 },
+  { student: 'Minh Tran', company: 'VinAI Research', role: 'ML Engineer Intern', status: 'Active', progress: 85, week: 6 },
+  { student: 'Linh Nguyen', company: 'Tiki Corporation', role: 'Frontend Developer Intern', status: 'Active', progress: 60, week: 3 },
+  { student: 'Hoa Le', company: 'MoMo', role: 'Backend Engineer Intern', status: 'Completed', progress: 100, week: 12 },
+  { student: 'Nam Pham', company: 'Grab Vietnam', role: 'Data Analyst Intern', status: 'Pending', progress: 0, week: 0 },
+  { student: 'Thu Vo', company: 'VNG Cloud', role: 'Cloud Infra Intern', status: 'Active', progress: 45, week: 2 },
+];
+
+const DEADLINES = [
+  { date: 'Sep 15', label: 'Week 04 Report due', student: 'Binh Do', type: 'report' },
+  { date: 'Sep 16', label: 'Mid-term evaluation', student: 'Minh Tran', type: 'eval' },
+  { date: 'Sep 18', label: 'Week 04 Report due', student: 'Linh Nguyen', type: 'report' },
+  { date: 'Sep 20', label: 'Onboarding deadline', student: 'Nam Pham', type: 'admin' },
+];
+
+const NOTIFICATIONS = [
+  { time: '2h ago', text: 'Binh Do submitted Week 04 report', icon: '📄', color: 'text-blue-600' },
+  { time: '4h ago', text: 'Minh Tran evaluation approved by supervisor', icon: '✓', color: 'text-emerald-600' },
+  { time: '1d ago', text: 'Hoa Le completed internship at MoMo', icon: '🎉', color: 'text-violet-600' },
+  { time: '1d ago', text: 'Nam Pham accepted offer at Grab Vietnam', icon: '→', color: 'text-slate-600' },
+  { time: '2d ago', text: 'Thu Vo missed Week 01 report deadline', icon: '!', color: 'text-red-500' },
+];
+
+const STATUS_CHART_DATA = [
+  { label: 'Active', value: 3, color: '#2563eb' },
+  { label: 'Completed', value: 1, color: '#059669' },
+  { label: 'Pending', value: 1, color: '#f59e0b' },
+  { label: 'Applications', value: 12, color: '#7c3aed' },
+];
+
+function AdminDashboardScreen() {
+  const totalStudents = ADMIN_INTERNSHIPS.length;
+  const activeCount = ADMIN_INTERNSHIPS.filter(i => i.status === 'Active').length;
+  const completedCount = ADMIN_INTERNSHIPS.filter(i => i.status === 'Completed').length;
+  const maxChart = Math.max(...STATUS_CHART_DATA.map(d => d.value));
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-8 py-5 bg-white border-b border-slate-200 shrink-0 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>Internship Monitoring</h1>
+          <p className="text-sm text-slate-500 mt-0.5">University Coordinator Dashboard · Sep 15, 2026</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 4v2.5L7.5 8"/></svg>
+            HUST · Fall 2026
+          </span>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
+
+        {/* Stats row */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: 'Total Students', value: totalStudents, sub: 'Enrolled this semester', color: 'text-slate-900', bg: 'bg-white', border: 'border-slate-200', icon: (
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round"><circle cx="9" cy="6" r="3"/><path d="M3 16c0-3.3 2.7-5 6-5s6 1.7 6 5"/></svg>
+            )},
+            { label: 'Active Internships', value: activeCount, sub: 'Currently ongoing', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-100', icon: (
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#2563eb" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="7" width="14" height="9" rx="2"/><path d="M6 7V5a3 3 0 016 0v2"/></svg>
+            )},
+            { label: 'Applications', value: 24, sub: '+5 this week', color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-100', icon: (
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="2" width="12" height="14" rx="2"/><path d="M6 6h6M6 9h6M6 12h3"/></svg>
+            )},
+            { label: 'Completed', value: completedCount, sub: 'This semester', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: (
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#059669" strokeWidth="1.5" strokeLinecap="round"><path d="M3 9l4.5 4.5L15 6"/></svg>
+            )},
+          ].map(s => (
+            <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl px-5 py-4 flex items-start gap-3`}>
+              <div className={`w-8 h-8 rounded-lg ${s.bg} border ${s.border} flex items-center justify-center shrink-0`}>{s.icon}</div>
+              <div>
+                <p className={`text-2xl font-bold ${s.color}`} style={{ fontFamily: "'DM Sans', sans-serif" }}>{s.value}</p>
+                <p className="text-xs font-medium text-slate-700">{s.label}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{s.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-5">
+          {/* Internship status table */}
+          <div className="col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">Student Internships</h2>
+              <span className="text-xs text-slate-400">{ADMIN_INTERNSHIPS.length} total</span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-slate-500">Student</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500">Role</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500">Progress</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500">Status</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500">Week</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {ADMIN_INTERNSHIPS.map((item, i) => {
+                    const statusStyle = item.status === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200' : item.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+                    return (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-slate-900">{item.student}</p>
+                          <p className="text-xs text-slate-500">{item.company}</p>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-600 max-w-[140px] truncate">{item.role}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${item.progress}%` }} />
+                            </div>
+                            <span className="text-xs font-medium text-slate-700">{item.progress}%</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${statusStyle}`}>{item.status}</span>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-500">{item.week > 0 ? `W${item.week}` : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div className="flex flex-col gap-4">
+            {/* Simple bar chart */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <h2 className="text-sm font-semibold text-slate-900">Internship Status</h2>
+              </div>
+              <div className="px-5 py-4 flex flex-col gap-3">
+                {STATUS_CHART_DATA.map(item => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-slate-600">{item.label}</span>
+                      <span className="text-xs font-bold text-slate-900">{item.value}</span>
+                    </div>
+                    <div className="h-4 rounded-md bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-md transition-all"
+                        style={{ width: `${(item.value / maxChart) * 100}%`, background: item.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Upcoming deadlines */}
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <h2 className="text-sm font-semibold text-slate-900">Upcoming Deadlines</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {DEADLINES.map((d, i) => (
+                  <div key={i} className="px-5 py-3 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 flex flex-col items-center justify-center shrink-0">
+                      <span className="text-[9px] text-slate-500 leading-none">{d.date.split(' ')[0]}</span>
+                      <span className="text-xs font-bold text-slate-900 leading-none">{d.date.split(' ')[1]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-800 truncate">{d.label}</p>
+                      <p className="text-[10px] text-slate-400">{d.student}</p>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${d.type === 'report' ? 'bg-blue-50 text-blue-600 border-blue-100' : d.type === 'eval' ? 'bg-violet-50 text-violet-600 border-violet-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                      {d.type === 'report' ? 'Report' : d.type === 'eval' ? 'Eval' : 'Admin'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent notifications */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-900">Recent Activity</h2>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {NOTIFICATIONS.map((n, i) => (
+              <div key={i} className="px-5 py-3 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                <span className={`text-base w-6 text-center shrink-0 ${n.color}`}>{n.icon}</span>
+                <p className="flex-1 text-sm text-slate-700">{n.text}</p>
+                <span className="text-xs text-slate-400 shrink-0">{n.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1982,6 +2654,9 @@ export default function App() {
         {screen === 'internship' && <InternshipScreen onSubmitReport={() => setScreen('weekly-report')} />}
         {screen === 'weekly-report' && <WeeklyReportScreen onBack={() => setScreen('internship')} onSubmitted={() => setScreen('supervisor-review')} />}
         {screen === 'supervisor-review' && <SupervisorReviewScreen onBack={() => setScreen('internship')} />}
+        {screen === 'evaluation' && <EvaluationScreen />}
+        {screen === 'profile-org' && <ProfileOrgScreen />}
+        {screen === 'admin-dashboard' && <AdminDashboardScreen />}
         {screen === 'profile' && (
           <div className="flex flex-col items-center justify-center h-full text-center px-12">
             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
