@@ -271,3 +271,58 @@ Table report_feedback {
   rating int // optional 1-5
   created_at timestamp [default: `now()`]
 }
+
+Table self_assessments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: - internship_placements.id]
+  content text [not null]
+  learning_outcomes text
+  submitted_at timestamp [default: `now()`]
+}
+
+Table evaluations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: - internship_placements.id]
+  supervisor_id uuid [not null, ref: > supervisors.id]
+  performance_rating int
+  overall_score decimal(5,2)
+  completion_decision completion_decision [default: 'pending']
+  evaluated_at timestamp [default: `now()`]
+}
+
+Enum completion_decision {
+  pending
+  passed
+  failed
+  incomplete
+}
+
+Table company_admins {
+  id uuid [pk, ref: - users.id]
+  company_id uuid [not null, ref: > companies.id]
+  title varchar
+}
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id]
+  type notification_type [not null]
+  title varchar [not null]
+  message text
+  related_entity_type varchar
+  related_entity_id uuid
+  is_read boolean [default: false]
+  created_at timestamp [default: `now()`]
+
+  Indexes {
+    (user_id, is_read)
+  }
+}
+
+Enum notification_type {
+  deadline_reminder
+  status_change
+  new_feedback
+  new_task
+  system
+}
