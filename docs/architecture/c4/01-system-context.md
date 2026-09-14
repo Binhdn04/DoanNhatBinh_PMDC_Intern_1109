@@ -1,20 +1,36 @@
 # C4 Level 1 — System Context
 
 ```mermaid
-C4Context
-  title InternHub system context
-  Person(student, "Student", "Finds internships, applies, reports progress")
-  Person(staff, "Company Staff", "Publishes internships and processes applications")
-  Person(supervisor, "Supervisor", "Manages placements, tasks, and report feedback")
-  Person(admin, "Admin", "Administers organizations and monitoring")
-  System(internhub, "InternHub", "Internship discovery, application, and progress platform")
-  System_Ext(llm, "LLM provider", "Generates optional explanations and summaries")
-  System_Ext(notify, "Email/notification provider", "Delivers outbound notifications")
-  Rel(student, internhub, "Uses", "HTTPS")
-  Rel(staff, internhub, "Uses", "HTTPS")
-  Rel(supervisor, internhub, "Uses", "HTTPS")
-  Rel(admin, internhub, "Uses", "HTTPS")
-  Rel(internhub, llm, "Requests optional generated text", "HTTPS")
-  Rel(internhub, notify, "Sends notifications", "HTTPS")
+flowchart TB
+  subgraph Users[People]
+    direction LR
+    Student[Student]
+    Staff[Company Staff]
+    Supervisor[Supervisor]
+    Admin[Admin]
+  end
+
+  InternHub([InternHub<br/>Internship platform])
+
+  subgraph External[External systems]
+    direction LR
+    LLM[LLM provider]
+    Notify[Email / notification provider]
+  end
+
+  Student --> InternHub
+  Staff --> InternHub
+  Supervisor --> InternHub
+  Admin --> InternHub
+  InternHub -->|Optional explaination and summarization| LLM
+  InternHub -->|Outbound messages| Notify
+
+  classDef person fill:#E8F1FF,stroke:#2563EB,color:#0F172A
+  classDef system fill:#2563EB,stroke:#1D4ED8,color:#FFFFFF
+  classDef external fill:#F8FAFC,stroke:#64748B,color:#0F172A
+  class Student,Staff,Supervisor,Admin person
+  class InternHub system
+  class LLM,Notify external
 ```
 
+All user interactions use HTTPS. Students discover, apply, and submit reports. Company Staff manage their company's openings and applications. Supervisors manage placements; Admins administer the platform.
