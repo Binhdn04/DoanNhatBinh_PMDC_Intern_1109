@@ -7,6 +7,10 @@
 
 InternHub is a centralized platform designed to help students find suitable internships, track application progress, and maintain transparent communication with companies and academic supervisors throughout the internship.
 
+### Architecture Documentation
+
+The production-target architecture and migration blueprint are available in the [C4 and arc42 documentation](./docs/architecture/README.md). These documents describe the intended backend and deployment architecture; the current application remains a frontend prototype with mock data.
+
 ### Problem Statement
 
 Students often struggle to find internships that match their skills and lack a centralized platform for tracking application status and maintaining clear communication with companies and supervisors. InternHub is designed to address these challenges in one platform.
