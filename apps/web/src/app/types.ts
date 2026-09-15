@@ -1,0 +1,15 @@
+export type Screen =
+  | 'discover'
+  | 'detail'
+  | 'apply'
+  | 'interview'
+  | 'interview-result'
+  | 'applications'
+  | 'internship'
+  | 'reports'
+  | 'weekly-report'
+  | 'supervisor-review'
+  | 'evaluation'
+  | 'profile-org'
+  | 'admin-dashboard'
+  | 'profile';

@@ -11,5 +11,3 @@ logs/
 *.log
 .claude-replay.*
 .tmp-*
-.plugins/
-.opencode-skills/

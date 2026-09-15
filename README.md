@@ -1,70 +1,67 @@
 # InternHub — Smart Internship Management System
 
 **Author:** Doan Nhat Binh  
-**Assignment:** Topic selection and software analysis using a top-down approach, followed by selecting the most important features for UI/UX and database design.
+**Assignment:** Software analysis using a top-down approach, followed by UI/UX and database design for the most important features.
 
-## Software Overview
+InternHub is a centralized platform for students to discover internships, track applications, and communicate transparently with companies and academic supervisors. The implemented application is a React/Vite UI prototype with frontend mock data; backend services and external integrations are planned but not initialized.
 
-InternHub is a centralized platform designed to help students find suitable internships, track application progress, and maintain transparent communication with companies and academic supervisors throughout the internship.
+## Workspace
 
-### Architecture Documentation
+This repository is a pnpm workspace.
 
-The production-target architecture and migration blueprint are available in the [C4 and arc42 documentation](./docs/architecture/README.md). These documents describe the intended backend and deployment architecture; the current application remains a frontend prototype with mock data.
-
-### Problem Statement
-
-Students often struggle to find internships that match their skills and lack a centralized platform for tracking application status and maintaining clear communication with companies and supervisors. InternHub is designed to address these challenges in one platform.
-
-### Analysis Scope (Top-down Approach)
-
-The software is analyzed using a three-layer model and consists of six main modules:
-
-1. Internship Discovery & Matching
-2. Internship Application Management
-3. Internship Progress Management
-4. Internship Evaluation
-5. User & Internship Organization
-6. Internship Monitoring & Reporting
-
-The **three core modules** selected for UI/UX and database design are:
-
-- **Internship Discovery & Matching** — search, filter, and receive internship recommendations based on skill compatibility (Match Score), with AI-assisted recommendation explanations.
-- **Internship Application Management** — submit applications and track their processing status in real time.
-- **Internship Progress Management** — manage assigned tasks and weekly progress reports between students and supervisors.
-
-### The Three Supporting Modules
-
-- **Internship Evaluation** — standardizes internship evaluation through self-assessment, learning outcomes, supervisor ratings, final score calculation, and completion decisions. This module supports academic assessment, credit calculation, and internship certification.
-- **User & Internship Organization** — manages identities, profiles, and permissions across the system. It includes student profiles, skills and preferences, company profiles, internship postings, and Student, Supervisor, and Admin roles. This module provides the foundation for the discovery, application, and progress modules.
-- **Internship Monitoring & Reporting** — provides an overview for universities, administrators, and companies through progress dashboards, application statistics, deadline reminders, status notifications, internship statistics, and consolidated performance reports.
-
-### AI Usage
-
-- **Match Score:** calculated using a weighted formula without AI to ensure transparency and explainability.
-- **Recommendation Explanation:** uses an LLM to explain match results in natural language.
-- **Search:** the proposed architecture is hybrid search (keyword + semantic embedding). The current UI/UX prototype uses keyword search, while semantic search is planned as an extension.
-
-### Tools
-
-- **Mindmap:** XMind
-- **UI/UX prototype:** Figma
-- **Database design:** DBdiagram
-
-### Quick Start
-
-To run the UI/UX prototype locally:
-
-```bash
-cd InternHub
-npm install
-npm run dev
+```text
+apps/
+  web/                 # React/Vite prototype
+  api/                 # planned NestJS API
+  worker/              # planned asynchronous job worker
+packages/
+  contracts/           # planned shared API DTOs
+  domain/              # planned framework-independent business rules
+infra/                 # planned deployment and platform configuration
+docs/
+  architecture/
+  analysis/
+  requirements/
+  data/
+  ux/
 ```
 
-To view and interact with the UI/UX prototype without downloading the code, visit the [Figma prototype](https://www.figma.com/make/G0R3nUP0L3fwgNQLG8RidV/Continue-InternHub-Development?t=8YxBoaR5xPYa230r-20&fullscreen=1).
+## Quick start
 
-- [Top-down approach](./Topdown_approach.png) — Top-down analysis exported from XMind.
-- [Feature Spec](./spec.md)
-- [Core Features – Use Case Diagram](./use_case.png)
-- [Full Features – Use Case Diagram](./use_case_full.png)
-- [Database design](./database_design.png) — Database design for the three core modules.
-- [InternHub](./InternHub/) — Source code and instructions for running the UI/UX prototype.
+Install Node.js 22+ and enable the pinned pnpm version through Corepack:
+
+```bash
+corepack enable
+corepack install
+pnpm install
+pnpm dev:web
+```
+
+The Vite server prints the local URL. Use the workspace scripts for checks and a production build:
+
+```bash
+pnpm typecheck:web
+pnpm build:web
+```
+
+See [the web application README](./apps/web/README.md) for its feature-oriented source layout.
+
+## Documentation
+
+- [Architecture documentation](./docs/architecture/README.md)
+- [Top-down analysis](./docs/analysis/Topdown_approach.png)
+- [Feature specification](./docs/requirements/spec.md)
+- [Core features use-case diagram](./docs/requirements/use_case.png)
+- [Full features use-case diagram](./docs/requirements/use_case_full.png)
+- [Database schema (DBML)](./docs/data/internship_platform.dbml)
+- [Database design](./docs/data/database_design.png)
+- [UI/UX main page](./docs/ux/main_page.png)
+
+## Current prototype scope
+
+- **Discovery & Matching:** search, filter, and view internship opportunities with a frontend Match Score.
+- **Application Management:** view details, apply, complete the simulated interview, and track application status.
+- **Internship Progress:** manage tasks, weekly reports, and supervisor feedback.
+- **Evaluation, profile, and monitoring:** interactive prototype screens for the supporting modules.
+
+The planned architecture uses deterministic scoring, optional AI explanations, a NestJS modular monolith, PostgreSQL, and asynchronous jobs. These are design targets documented in `docs/architecture`, not services included in the current prototype.

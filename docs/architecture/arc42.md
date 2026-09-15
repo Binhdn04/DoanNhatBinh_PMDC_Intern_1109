@@ -47,11 +47,11 @@ The system boundary contains a web application and its backend. Students search 
 | Evaluation | assessments and completion decision | Extension |
 | Monitoring & Reporting | dashboards and aggregate reporting | Extension |
 
-Each module exposes application services and DTOs; it may not query another module's tables directly. Cross-module writes use service interfaces or domain events inside the monolith.
+Each module exposes application services and DTOs; it may not query another module's tables directly. Cross-module writes use service interfaces or domain events inside the monolith. See the [layered architecture view](./c4/09-layered-architecture.md) for dependency boundaries.
 
 ### Level 2 — Client features
 
-The SPA is organized by `features/discovery`, `features/applications`, `features/progress`, and `features/profile`. Shared routing, API client, authentication/session state, query cache, design-system components, and domain types are separate from feature UI. The [C4 component view](./c4/03-component-view.md) zooms into the API container. Code-level diagrams cover [Discovery & Matching](./c4/04a-discovery-matching-code-diagram.md), [Application Management](./c4/04-code-diagram.md), and [Internship Progress](./c4/04b-progress-code-diagram.md).
+The SPA is organized by `features/discovery`, `features/applications`, `features/progress`, and `features/profile`. Shared routing, API client, authentication/session state, query cache, design-system components, and domain types are separate from feature UI. The [C4 component view](./c4/03-component-view.md) zooms into the API container. Code-level diagrams cover [Discovery & Matching](./c4/04a-discovery-matching-code-diagram.md), [Application Management](./c4/04c-application-status-transition-code-diagram.md), and [Internship Progress](./c4/04b-progress-code-diagram.md). The intended repository layout is shown in the [code-structure diagram](./c4/10-code-structure.md).
 
 ## 6. Runtime View
 
@@ -74,9 +74,13 @@ The SPA is organized by `features/discovery`, `features/applications`, `features
 3. The worker calls the AI adapter. On timeout, validation failure, or provider error it records a failed job and leaves `ai_summary` null; raw content stays available.
 4. A supervisor adds feedback only for a placement they supervise; the Notifications module informs the student.
 
+The full interactions, including AI failure, worker crash recovery, retry, and dead-letter handling, are documented in the [runtime sequence view](./c4/06-runtime-sequence-view.md). The [event-to-job view](./c4/07-event-job-flow.md) shows how committed domain changes trigger durable asynchronous work.
+
 ## 7. Deployment View
 
 Docker Compose runs `reverse-proxy`, `web`, `api`, `worker`, `postgres`, and S3-compatible `object-storage`. The proxy terminates TLS in production and routes `/` to the SPA and `/api` to the API. Only the proxy is publicly reachable. PostgreSQL and object storage use persistent volumes and are private to the Compose network. See [C4 deployment view](./c4/05-deployment-view.md).
+
+The [network and trust-boundary view](./c4/08-network-view.md) complements deployment by showing ingress, private connectivity, and external-provider egress.
 
 ## 8. Cross-cutting Concepts
 

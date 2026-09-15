@@ -1,0 +1,10 @@
+{
+  "name": "internhub",
+  "private": true,
+  "packageManager": "pnpm@10.34.3",
+  "scripts": {
+    "dev:web": "pnpm --filter @internhub/web dev",
+    "build:web": "pnpm --filter @internhub/web build",
+    "typecheck:web": "pnpm --filter @internhub/web typecheck"
+  }
+}
