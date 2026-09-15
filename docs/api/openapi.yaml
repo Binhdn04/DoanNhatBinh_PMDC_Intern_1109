@@ -1,0 +1,753 @@
+openapi: 3.0.3
+info:
+  title: InternHub API
+  version: 1.0.0-draft
+  description: |
+    Target REST contract for the InternHub three-tier modular monolith. All paths
+    begin after authentication; an active role is supplied by the authenticated
+    session/token and enforced with the caller's record relationship. AI endpoints
+    are optional advisory enrichment only. There are no AI interview, screening,
+    automated-decision, semantic-search, or external-notification endpoints.
+servers:
+  - url: /api/v1
+    description: Same-origin production API
+tags:
+  - name: Identity
+  - name: Students
+  - name: Documents
+  - name: Companies
+  - name: Postings
+  - name: Applications
+  - name: Placements
+  - name: Reports
+  - name: Evaluations
+  - name: Monitoring
+  - name: Notifications
+  - name: AI jobs
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      tags: [Identity]
+      summary: Get authenticated identity and permitted roles
+      operationId: getMe
+      responses:
+        '200': {description: Current identity, content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /students/me:
+    get:
+      tags: [Students]
+      summary: Get the current Student profile
+      operationId: getMyStudentProfile
+      responses:
+        '200': {description: Profile, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfile'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    patch:
+      tags: [Students]
+      summary: Update the current Student contact and education profile
+      operationId: updateMyStudentProfile
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfileInput'}}}}
+      responses:
+        '200': {description: Updated profile, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfile'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /students/me/skills:
+    put:
+      tags: [Students]
+      summary: Replace the current Student skill set
+      operationId: replaceMySkills
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SkillSetInput'}}}}
+      responses:
+        '200': {description: Saved skills, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StudentSkill'}}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+  /students/me/preferences:
+    get:
+      tags: [Students]
+      summary: Get current Student career preferences
+      operationId: getMyPreferences
+      responses: {'200': {description: Preferences, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}}
+    put:
+      tags: [Students]
+      summary: Replace current Student career preferences
+      operationId: replaceMyPreferences
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
+      responses:
+        '200': {description: Saved preferences, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+  /documents:
+    get:
+      tags: [Documents]
+      summary: List reusable documents owned by the current Student
+      operationId: listMyDocuments
+      responses: {'200': {description: Document list, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentList'}}}}}
+    post:
+      tags: [Documents]
+      summary: Start an authorized private-document upload
+      operationId: createDocumentUpload
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUploadRequest'}}}}
+      responses:
+        '201': {description: Upload authorization, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUpload'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+  /documents/{documentId}:
+    delete:
+      tags: [Documents]
+      summary: Remove a reusable document link when it is not retained by a submitted record
+      operationId: deleteDocument
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses:
+        '204': {description: Removed}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/complete:
+    post:
+      tags: [Documents]
+      summary: Finalize a private-document upload after object storage transfer
+      operationId: completeDocumentUpload
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses:
+        '200': {description: Available document, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/download-url:
+    get:
+      tags: [Documents]
+      summary: Issue a short-lived download URL for an authorized document
+      operationId: getDocumentDownloadUrl
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses:
+        '200': {description: Authorized URL, content: {application/json: {schema: {$ref: '#/components/schemas/DownloadUrl'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /companies:
+    get:
+      tags: [Companies]
+      summary: List companies available to the active role
+      operationId: listCompanies
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Search'}]
+      responses: {'200': {description: Company page, content: {application/json: {schema: {$ref: '#/components/schemas/CompanyPage'}}}}}
+  /companies/{companyId}:
+    get:
+      tags: [Companies]
+      summary: Get a company profile
+      operationId: getCompany
+      parameters: [{$ref: '#/components/parameters/CompanyId'}]
+      responses: {'200': {description: Company, content: {application/json: {schema: {$ref: '#/components/schemas/Company'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    patch:
+      tags: [Companies]
+      summary: Update an owned or administered company profile
+      operationId: updateCompany
+      parameters: [{$ref: '#/components/parameters/CompanyId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CompanyInput'}}}}
+      responses: {'200': {description: Updated company, content: {application/json: {schema: {$ref: '#/components/schemas/Company'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '400': {$ref: '#/components/responses/ValidationError'}}
+  /postings:
+    get:
+      tags: [Postings]
+      summary: Discover eligible postings or list managed postings
+      description: Student requests return only Open, non-expired postings. Company Staff and Admin receive records within their authorized management scope; `includeUnavailable` is ignored for Student discovery.
+      operationId: listPostings
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+        - {$ref: '#/components/parameters/Search'}
+        - {name: category, in: query, schema: {type: string}}
+        - {name: location, in: query, schema: {type: string}}
+        - {name: durationWeeks, in: query, schema: {type: integer, minimum: 1}}
+        - {name: workArrangement, in: query, schema: {$ref: '#/components/schemas/WorkArrangement'}}
+        - {name: sort, in: query, schema: {type: string, enum: [relevance, newest, match_score]}}
+        - {name: companyId, in: query, schema: {type: string, format: uuid}}
+        - {name: includeUnavailable, in: query, schema: {type: boolean, default: false}}
+      responses: {'200': {description: Posting page, content: {application/json: {schema: {$ref: '#/components/schemas/PostingPage'}}}}}
+    post:
+      tags: [Postings]
+      summary: Create a Draft posting
+      operationId: createPosting
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingInput'}}}}
+      responses: {'201': {description: Draft posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /postings/saved:
+    get:
+      tags: [Postings]
+      summary: List the current Student's saved postings, including later-unavailable items
+      operationId: listSavedPostings
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
+      responses: {'200': {description: Saved posting page, content: {application/json: {schema: {$ref: '#/components/schemas/PostingPage'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /postings/{postingId}:
+    get:
+      tags: [Postings]
+      summary: Get an authorized posting detail and, for Students, deterministic match breakdown
+      operationId: getPosting
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      responses: {'200': {description: Posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      tags: [Postings]
+      summary: Edit a Draft or otherwise authorized managed posting
+      operationId: updatePosting
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingInput'}}}}
+      responses: {'200': {description: Updated posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /postings/{postingId}/publish:
+    post:
+      tags: [Postings]
+      summary: Validate and publish a Draft posting
+      operationId: publishPosting
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      responses: {'200': {description: Open posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '422': {$ref: '#/components/responses/PublishValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /postings/{postingId}/lifecycle:
+    post:
+      tags: [Postings]
+      summary: Close or archive an authorized posting
+      operationId: transitionPostingLifecycle
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingLifecycleInput'}}}}
+      responses: {'200': {description: Updated posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /postings/{postingId}/saved:
+    put:
+      tags: [Postings]
+      summary: Save an eligible posting once for the current Student
+      operationId: savePosting
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      responses: {'204': {description: Saved or already saved}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete:
+      tags: [Postings]
+      summary: Remove the current Student's saved posting
+      operationId: unsavePosting
+      parameters: [{$ref: '#/components/parameters/PostingId'}]
+      responses: {'204': {description: Removed}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /postings/{postingId}/applications:
+    get:
+      tags: [Applications]
+      summary: List applications for an owned or administered posting
+      operationId: listPostingApplications
+      parameters: [{$ref: '#/components/parameters/PostingId'}, {$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/ApplicationStatus'}}]
+      responses: {'200': {description: Application page, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationPage'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /applications:
+    get:
+      tags: [Applications]
+      summary: List applications available to the active role
+      operationId: listApplications
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/ApplicationStatus'}}, {name: postingId, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Application page, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationPage'}}}}}
+    post:
+      tags: [Applications]
+      summary: Submit one application to an eligible posting
+      operationId: createApplication
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationInput'}}}}
+      responses: {'201': {description: Submitted application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /applications/{applicationId}:
+    get:
+      tags: [Applications]
+      summary: Get an authorized application, submission snapshot, documents, and immutable history
+      operationId: getApplication
+      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
+      responses: {'200': {description: Application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /applications/{applicationId}/status:
+    post:
+      tags: [Applications]
+      summary: Move an application through an authorized staff/Admin transition
+      description: Accepting is idempotent and creates exactly one placement. Rejection is allowed from any staff-review non-terminal state.
+      operationId: transitionApplicationStatus
+      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationStatusTransitionInput'}}}}
+      responses: {'200': {description: Updated application and placement link when accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /applications/{applicationId}/withdraw:
+    post:
+      tags: [Applications]
+      summary: Withdraw the current Student's non-terminal application
+      operationId: withdrawApplication
+      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
+      requestBody: {content: {application/json: {schema: {$ref: '#/components/schemas/NoteInput'}}}}
+      responses: {'200': {description: Withdrawn application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /placements:
+    get:
+      tags: [Placements]
+      summary: List placements in the active role's permitted scope
+      operationId: listPlacements
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/PlacementStatus'}}, {name: termId, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Placement page, content: {application/json: {schema: {$ref: '#/components/schemas/PlacementPage'}}}}}
+  /placements/{placementId}:
+    get:
+      tags: [Placements]
+      summary: Get authorized placement context and role-permitted progress summary
+      operationId: getPlacement
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses: {'200': {description: Placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /placements/{placementId}/lifecycle:
+    post:
+      tags: [Placements]
+      summary: Complete or terminate an Active placement
+      operationId: transitionPlacementLifecycle
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PlacementLifecycleInput'}}}}
+      responses: {'200': {description: Updated placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /placements/{placementId}/tasks:
+    get:
+      tags: [Placements]
+      summary: List tasks for an authorized placement
+      operationId: listPlacementTasks
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses: {'200': {description: Tasks, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Task'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [Placements]
+      summary: Create a task on an Active assigned placement
+      operationId: createTask
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TaskInput'}}}}
+      responses: {'201': {description: Created task, content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /placements/{placementId}/tasks/{taskId}/status:
+    patch:
+      tags: [Placements]
+      summary: Update task status as the placement Student
+      operationId: updateTaskStatus
+      parameters: [{$ref: '#/components/parameters/PlacementId'}, {$ref: '#/components/parameters/TaskId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TaskStatusInput'}}}}
+      responses: {'200': {description: Updated task, content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /placements/{placementId}/reports:
+    get:
+      tags: [Reports]
+      summary: List reports visible to the active role
+      operationId: listReports
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses: {'200': {description: Reports, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/WeeklyReport'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [Reports]
+      summary: Create the current Student's private draft for one reporting week
+      operationId: createReportDraft
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportDraftInput'}}}}
+      responses: {'201': {description: Draft report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /reports/{reportId}:
+    get:
+      tags: [Reports]
+      summary: Get an authorized report, versions, and review history
+      operationId: getReport
+      parameters: [{$ref: '#/components/parameters/ReportId'}]
+      responses: {'200': {description: Report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    patch:
+      tags: [Reports]
+      summary: Save the current Student's draft or revision content
+      operationId: saveReportDraft
+      parameters: [{$ref: '#/components/parameters/ReportId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportDraftInput'}}}}
+      responses: {'200': {description: Saved report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /reports/{reportId}/submit:
+    post:
+      tags: [Reports]
+      summary: Submit or resubmit a complete report version
+      operationId: submitReport
+      parameters: [{$ref: '#/components/parameters/ReportId'}]
+      responses: {'200': {description: Submitted report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /reports/{reportId}/reviews:
+    post:
+      tags: [Reports]
+      summary: Approve or request revision of the current submitted report version
+      operationId: reviewReport
+      parameters: [{$ref: '#/components/parameters/ReportId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportReviewInput'}}}}
+      responses: {'200': {description: Reviewed report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /placements/{placementId}/self-assessment:
+    get:
+      tags: [Evaluations]
+      summary: Get the authorized Student self-assessment
+      operationId: getSelfAssessment
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses: {'200': {description: Self-assessment, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessment'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '403': {$ref: '#/components/responses/Forbidden'}}
+    put:
+      tags: [Evaluations]
+      summary: Save or submit the placement Student's independent self-assessment
+      operationId: upsertSelfAssessment
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessmentInput'}}}}
+      responses: {'200': {description: Saved assessment, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessment'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /placements/{placementId}/performance-evaluation:
+    get:
+      tags: [Evaluations]
+      summary: Get the authorized separate supervisor/Admin performance evaluation
+      operationId: getPerformanceEvaluation
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses: {'200': {description: Performance evaluation, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluation'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '403': {$ref: '#/components/responses/Forbidden'}}
+    put:
+      tags: [Evaluations]
+      summary: Save or submit an assigned Supervisor/Admin performance evaluation
+      operationId: upsertPerformanceEvaluation
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluationInput'}}}}
+      responses: {'200': {description: Saved evaluation, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluation'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /monitoring:
+    get:
+      tags: [Monitoring]
+      summary: Get the Admin-only, read-only program/term monitoring dashboard
+      operationId: getMonitoring
+      parameters: [{name: programId, in: query, schema: {type: string, format: uuid}}, {name: termId, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Read-only monitoring data and drill-through references, content: {application/json: {schema: {$ref: '#/components/schemas/MonitoringDashboard'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List only the current user's in-app notifications
+      operationId: listNotifications
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: unreadOnly, in: query, schema: {type: boolean, default: false}}]
+      responses: {'200': {description: Notification page, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPage'}}}}}
+  /notifications/mark-read:
+    post:
+      tags: [Notifications]
+      summary: Mark all current-user notifications as read
+      operationId: markAllNotificationsRead
+      responses: {'204': {description: Marked read}}
+  /notifications/{notificationId}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark one current-user notification as read
+      operationId: markNotificationRead
+      parameters: [{$ref: '#/components/parameters/NotificationId'}]
+      responses: {'200': {description: Updated notification, content: {application/json: {schema: {$ref: '#/components/schemas/Notification'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /ai-jobs:
+    post:
+      tags: [AI jobs]
+      summary: Request optional advisory AI explanation or summary
+      operationId: createAiJob
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AiJobRequest'}}}}
+      responses: {'202': {description: Durable queued/reused AI job, content: {application/json: {schema: {$ref: '#/components/schemas/AiJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /ai-jobs/{aiJobId}:
+    get:
+      tags: [AI jobs]
+      summary: Poll an authorized optional AI job
+      operationId: getAiJob
+      parameters: [{$ref: '#/components/parameters/AiJobId'}]
+      responses: {'200': {description: Advisory job status/result, content: {application/json: {schema: {$ref: '#/components/schemas/AiJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PageSize: {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+    Search: {name: q, in: query, schema: {type: string, maxLength: 200}}
+    CompanyId: {name: companyId, in: path, required: true, schema: {type: string, format: uuid}}
+    PostingId: {name: postingId, in: path, required: true, schema: {type: string, format: uuid}}
+    ApplicationId: {name: applicationId, in: path, required: true, schema: {type: string, format: uuid}}
+    PlacementId: {name: placementId, in: path, required: true, schema: {type: string, format: uuid}}
+    TaskId: {name: taskId, in: path, required: true, schema: {type: string, format: uuid}}
+    ReportId: {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
+    DocumentId: {name: documentId, in: path, required: true, schema: {type: string, format: uuid}}
+    NotificationId: {name: notificationId, in: path, required: true, schema: {type: string, format: uuid}}
+    AiJobId: {name: aiJobId, in: path, required: true, schema: {type: string, format: uuid}}
+  responses:
+    Unauthorized: {description: Authentication is missing or invalid, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Forbidden: {description: Active role or record relationship is not authorized, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    NotFound: {description: Resource does not exist or is not exposed to the caller, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Conflict: {description: Duplicate resource or invalid lifecycle state, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    ValidationError: {description: Request validation failed, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
+    PublishValidationError: {description: Posting remains Draft; missing publish fields are identified, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
+  schemas:
+    Role: {type: string, enum: [STUDENT, COMPANY_STAFF, SUPERVISOR, ADMIN]}
+    WorkArrangement: {type: string, enum: [ONSITE, REMOTE, HYBRID]}
+    PostingStatus: {type: string, enum: [DRAFT, OPEN, CLOSED, ARCHIVED]}
+    ApplicationStatus: {type: string, enum: [SUBMITTED, UNDER_REVIEW, INTERVIEW, ACCEPTED, REJECTED, WITHDRAWN]}
+    PlacementStatus: {type: string, enum: [ACTIVE, COMPLETED, TERMINATED]}
+    TaskStatus: {type: string, enum: [TODO, IN_PROGRESS, DONE]}
+    ReportState: {type: string, enum: [DRAFT, SUBMITTED, REVISION_REQUESTED, APPROVED]}
+    AssessmentState: {type: string, enum: [DRAFT, SUBMITTED]}
+    CompletionDecision: {type: string, enum: [PASSED, FAILED, PENDING, INCOMPLETE]}
+    Id: {type: string, format: uuid}
+    Timestamp: {type: string, format: date-time}
+    Date: {type: string, format: date}
+    Me:
+      type: object
+      required: [id, email, fullName, activeRole, roles]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        email: {type: string, format: email}
+        fullName: {type: string}
+        activeRole: {$ref: '#/components/schemas/Role'}
+        roles: {type: array, items: {$ref: '#/components/schemas/Role'}}
+    StudentProfileInput:
+      type: object
+      required: [fullName, contactEmail, university, major]
+      properties:
+        fullName: {type: string, maxLength: 200}
+        contactEmail: {type: string, format: email}
+        contactPhone: {type: string, maxLength: 40}
+        university: {type: string, maxLength: 200}
+        major: {type: string, maxLength: 200}
+        graduationYear: {type: integer, minimum: 2000, maximum: 2200}
+        bio: {type: string, maxLength: 5000}
+    StudentProfile:
+      allOf:
+        - {$ref: '#/components/schemas/StudentProfileInput'}
+        - type: object
+          required: [id]
+          properties: {id: {$ref: '#/components/schemas/Id'}, programId: {$ref: '#/components/schemas/Id'}}
+    SkillSetInput:
+      type: object
+      required: [skills]
+      properties:
+        skills: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/StudentSkillInput'}}
+    StudentSkillInput:
+      type: object
+      required: [name]
+      properties: {name: {type: string, maxLength: 100}, proficiency: {type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED]}}
+    StudentSkill:
+      allOf: [{$ref: '#/components/schemas/StudentSkillInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
+    Preferences:
+      type: object
+      properties:
+        industries: {type: array, items: {type: string}}
+        locations: {type: array, items: {type: string}}
+        workArrangements: {type: array, items: {$ref: '#/components/schemas/WorkArrangement'}}
+        minDurationWeeks: {type: integer, minimum: 1}
+        maxDurationWeeks: {type: integer, minimum: 1}
+    DocumentUploadRequest:
+      type: object
+      required: [fileName, contentType, sizeBytes, sha256, kind]
+      properties:
+        fileName: {type: string, maxLength: 255}
+        contentType: {type: string, maxLength: 127}
+        sizeBytes: {type: integer, format: int64, minimum: 1}
+        sha256: {type: string, pattern: '^[A-Fa-f0-9]{64}$'}
+        kind: {type: string, enum: [CV, PORTFOLIO, TRANSCRIPT, OTHER]}
+    DocumentUpload:
+      type: object
+      required: [document, uploadUrl]
+      properties: {document: {$ref: '#/components/schemas/Document'}, uploadUrl: {type: string, format: uri}}
+    DownloadUrl:
+      type: object
+      required: [url, expiresAt]
+      properties: {url: {type: string, format: uri}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+    Document:
+      type: object
+      required: [id, fileName, contentType, sizeBytes, state, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        fileName: {type: string}
+        contentType: {type: string}
+        sizeBytes: {type: integer, format: int64}
+        state: {type: string, enum: [PENDING, AVAILABLE, REJECTED, DELETED]}
+        kind: {type: string, enum: [CV, PORTFOLIO, TRANSCRIPT, OTHER]}
+        createdAt: {$ref: '#/components/schemas/Timestamp'}
+    DocumentList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Document'}}}
+    CompanyInput:
+      type: object
+      required: [name]
+      properties: {name: {type: string, maxLength: 200}, website: {type: string, format: uri}, industry: {type: string}, description: {type: string, maxLength: 10000}}
+    Company:
+      allOf: [{$ref: '#/components/schemas/CompanyInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
+    CompanyPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Company'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    PostingSkillInput:
+      type: object
+      required: [name, importance]
+      properties: {name: {type: string, maxLength: 100}, importance: {type: string, enum: [REQUIRED, OPTIONAL]}}
+    PostingInput:
+      type: object
+      required: [companyId, title]
+      properties:
+        companyId: {$ref: '#/components/schemas/Id'}
+        termId: {$ref: '#/components/schemas/Id'}
+        title: {type: string, maxLength: 200}
+        description: {type: string, maxLength: 20000}
+        category: {type: string}
+        location: {type: string}
+        workArrangement: {$ref: '#/components/schemas/WorkArrangement'}
+        durationWeeks: {type: integer, minimum: 1}
+        openings: {type: integer, minimum: 1}
+        applicationDeadline: {$ref: '#/components/schemas/Date'}
+        responsibilities: {type: string, maxLength: 20000}
+        benefits: {type: string, maxLength: 20000}
+        skills: {type: array, items: {$ref: '#/components/schemas/PostingSkillInput'}}
+    MatchScore:
+      type: object
+      required: [score, matchedSkills, missingSkills, calculationVersion, advisory]
+      properties:
+        score: {type: integer, minimum: 0, maximum: 100}
+        matchedSkills: {type: array, items: {type: string}}
+        missingSkills: {type: array, items: {type: string}}
+        calculationVersion: {type: string}
+        advisory: {type: boolean, enum: [true]}
+    Posting:
+      allOf:
+        - {$ref: '#/components/schemas/PostingInput'}
+        - type: object
+          required: [id, company, status, eligible, openings, createdAt]
+          properties:
+            id: {$ref: '#/components/schemas/Id'}
+            company: {$ref: '#/components/schemas/Company'}
+            status: {$ref: '#/components/schemas/PostingStatus'}
+            eligible: {type: boolean, description: Derived from Open status and deadline; never an AI outcome.}
+            publishedAt: {$ref: '#/components/schemas/Timestamp'}
+            createdAt: {$ref: '#/components/schemas/Timestamp'}
+            isSaved: {type: boolean}
+            hasApplied: {type: boolean}
+            matchScore: {$ref: '#/components/schemas/MatchScore'}
+    PostingPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Posting'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    PostingLifecycleInput:
+      type: object
+      required: [targetStatus]
+      properties: {targetStatus: {type: string, enum: [CLOSED, ARCHIVED]}, note: {type: string, maxLength: 2000}}
+    ApplicationInput:
+      type: object
+      required: [postingId, contactName, contactEmail, university, major, availability, cvDocumentId]
+      properties:
+        postingId: {$ref: '#/components/schemas/Id'}
+        contactName: {type: string, maxLength: 200}
+        contactEmail: {type: string, format: email}
+        contactPhone: {type: string, maxLength: 40}
+        university: {type: string, maxLength: 200}
+        major: {type: string, maxLength: 200}
+        graduationYear: {type: integer}
+        availability: {type: string, maxLength: 4000}
+        coverNote: {type: string, maxLength: 10000}
+        cvDocumentId: {$ref: '#/components/schemas/Id'}
+        additionalDocumentIds: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}
+    StatusHistoryEntry:
+      type: object
+      required: [id, toStatus, actorName, changedAt]
+      properties: {id: {$ref: '#/components/schemas/Id'}, fromStatus: {$ref: '#/components/schemas/ApplicationStatus'}, toStatus: {$ref: '#/components/schemas/ApplicationStatus'}, actorName: {type: string}, note: {type: string}, changedAt: {$ref: '#/components/schemas/Timestamp'}}
+    Application:
+      allOf:
+        - {$ref: '#/components/schemas/ApplicationInput'}
+        - type: object
+          required: [id, status, submittedAt, history]
+          properties:
+            id: {$ref: '#/components/schemas/Id'}
+            status: {$ref: '#/components/schemas/ApplicationStatus'}
+            submittedAt: {$ref: '#/components/schemas/Timestamp'}
+            posting: {$ref: '#/components/schemas/Posting'}
+            documents: {type: array, items: {$ref: '#/components/schemas/Document'}}
+            history: {type: array, items: {$ref: '#/components/schemas/StatusHistoryEntry'}}
+            placementId: {$ref: '#/components/schemas/Id'}
+    ApplicationPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Application'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    ApplicationStatusTransitionInput:
+      oneOf:
+        - type: object
+          required: [targetStatus]
+          properties: {targetStatus: {type: string, enum: [UNDER_REVIEW, INTERVIEW, REJECTED]}, note: {type: string, maxLength: 4000}}
+        - type: object
+          required: [targetStatus, supervisorUserId, startDate, endDate]
+          properties: {targetStatus: {type: string, enum: [ACCEPTED]}, note: {type: string, maxLength: 4000}, supervisorUserId: {$ref: '#/components/schemas/Id'}, startDate: {$ref: '#/components/schemas/Date'}, endDate: {$ref: '#/components/schemas/Date'}}
+    NoteInput: {type: object, properties: {note: {type: string, maxLength: 4000}}}
+    Placement:
+      type: object
+      required: [id, applicationId, studentId, postingId, companyId, status, startDate, endDate]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        applicationId: {$ref: '#/components/schemas/Id'}
+        studentId: {$ref: '#/components/schemas/Id'}
+        postingId: {$ref: '#/components/schemas/Id'}
+        companyId: {$ref: '#/components/schemas/Id'}
+        termId: {$ref: '#/components/schemas/Id'}
+        status: {$ref: '#/components/schemas/PlacementStatus'}
+        startDate: {$ref: '#/components/schemas/Date'}
+        endDate: {$ref: '#/components/schemas/Date'}
+        supervisor: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, fullName: {type: string}}}
+        taskSummary: {type: object, additionalProperties: {type: integer}}
+        reportSummary: {type: object, additionalProperties: {type: integer}}
+    PlacementPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Placement'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    PlacementLifecycleInput:
+      type: object
+      required: [targetStatus]
+      properties: {targetStatus: {type: string, enum: [COMPLETED, TERMINATED]}, note: {type: string, maxLength: 4000}}
+    TaskInput:
+      type: object
+      required: [title, description, priority]
+      properties: {title: {type: string, maxLength: 200}, description: {type: string, maxLength: 10000}, priority: {type: string, enum: [LOW, MEDIUM, HIGH]}, dueDate: {$ref: '#/components/schemas/Date'}}
+    TaskStatusInput: {type: object, required: [status], properties: {status: {$ref: '#/components/schemas/TaskStatus'}}}
+    Task:
+      allOf:
+        - {$ref: '#/components/schemas/TaskInput'}
+        - type: object
+          required: [id, status, overdue, createdAt]
+          properties: {id: {$ref: '#/components/schemas/Id'}, status: {$ref: '#/components/schemas/TaskStatus'}, overdue: {type: boolean, description: Derived, never inferred progress.}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
+    ReportDraftInput:
+      type: object
+      required: [weekStart, weekEnd]
+      properties: {weekStart: {$ref: '#/components/schemas/Date'}, weekEnd: {$ref: '#/components/schemas/Date'}, accomplishments: {type: string, maxLength: 20000}, challenges: {type: string, maxLength: 20000}, nextWeekPlan: {type: string, maxLength: 20000}, attachmentDocumentIds: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}}
+    ReportVersion:
+      type: object
+      required: [id, versionNo, accomplishments, challenges, nextWeekPlan, submittedAt]
+      properties: {id: {$ref: '#/components/schemas/Id'}, versionNo: {type: integer, minimum: 1}, accomplishments: {type: string}, challenges: {type: string}, nextWeekPlan: {type: string}, attachments: {type: array, items: {$ref: '#/components/schemas/Document'}}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}
+    ReportReviewInput:
+      type: object
+      required: [outcome]
+      properties: {outcome: {type: string, enum: [APPROVED, REVISION_REQUESTED]}, feedback: {type: string, maxLength: 10000}}
+    ReportReview:
+      allOf: [{$ref: '#/components/schemas/ReportReviewInput'}, {type: object, required: [id, reviewedAt, reviewerName], properties: {id: {$ref: '#/components/schemas/Id'}, reviewedAt: {$ref: '#/components/schemas/Timestamp'}, reviewerName: {type: string}}}]
+    WeeklyReport:
+      allOf:
+        - {$ref: '#/components/schemas/ReportDraftInput'}
+        - type: object
+          required: [id, placementId, state, versions, reviews]
+          properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, state: {$ref: '#/components/schemas/ReportState'}, currentVersionNo: {type: integer, minimum: 0}, versions: {type: array, items: {$ref: '#/components/schemas/ReportVersion'}}, reviews: {type: array, items: {$ref: '#/components/schemas/ReportReview'}}}
+    SelfAssessmentInput:
+      oneOf:
+        - type: object
+          required: [status]
+          properties: {status: {type: string, enum: [DRAFT]}, ratings: {type: object, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, reflection: {type: string, maxLength: 20000}, learningOutcomes: {type: string, maxLength: 20000}}
+        - type: object
+          required: [status, ratings, reflection, learningOutcomes]
+          properties: {status: {type: string, enum: [SUBMITTED]}, ratings: {type: object, minProperties: 1, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, reflection: {type: string, minLength: 1, maxLength: 20000}, learningOutcomes: {type: string, minLength: 1, maxLength: 20000}}
+    SelfAssessment:
+      allOf: [{$ref: '#/components/schemas/SelfAssessmentInput'}, {type: object, required: [id, placementId], properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}}]
+    PerformanceEvaluationInput:
+      oneOf:
+        - type: object
+          required: [status, completionDecision]
+          properties: {status: {type: string, enum: [DRAFT]}, ratings: {type: object, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, comments: {type: string, maxLength: 20000}, completionDecision: {$ref: '#/components/schemas/CompletionDecision'}}
+        - type: object
+          required: [status, ratings, completionDecision]
+          properties: {status: {type: string, enum: [SUBMITTED]}, ratings: {type: object, minProperties: 1, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, comments: {type: string, maxLength: 20000}, completionDecision: {$ref: '#/components/schemas/CompletionDecision'}}
+    PerformanceEvaluation:
+      allOf: [{$ref: '#/components/schemas/PerformanceEvaluationInput'}, {type: object, required: [id, placementId, authorName], properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, authorName: {type: string}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}}]
+    MonitoringDashboard:
+      type: object
+      required: [scope, applications, placements, tasks, reports, deadlines, recentActivity, readOnly]
+      properties:
+        scope: {type: object, properties: {programId: {$ref: '#/components/schemas/Id'}, termId: {$ref: '#/components/schemas/Id'}}}
+        applications: {type: object, additionalProperties: {type: integer}}
+        placements: {type: object, additionalProperties: {type: integer}}
+        tasks: {type: object, additionalProperties: {type: integer}}
+        reports: {type: object, additionalProperties: {type: integer}}
+        deadlines: {type: array, items: {$ref: '#/components/schemas/Deadline'}}
+        recentActivity: {type: array, items: {$ref: '#/components/schemas/Activity'}}
+        readOnly: {type: boolean, enum: [true]}
+    Deadline: {type: object, required: [kind, dueDate, target], properties: {kind: {type: string, enum: [APPLICATION, REPORT]}, dueDate: {$ref: '#/components/schemas/Date'}, target: {$ref: '#/components/schemas/Target'}}}
+    Activity: {type: object, required: [type, occurredAt, target], properties: {type: {type: string}, occurredAt: {$ref: '#/components/schemas/Timestamp'}, target: {$ref: '#/components/schemas/Target'}}}
+    Target: {type: object, properties: {type: {type: string, enum: [POSTING, APPLICATION, PLACEMENT, REPORT]}, id: {$ref: '#/components/schemas/Id'}, label: {type: string}}}
+    Notification:
+      type: object
+      required: [id, type, title, createdAt, read]
+      properties: {id: {$ref: '#/components/schemas/Id'}, type: {type: string, enum: [APPLICATION_STATUS_CHANGED, TASK_ASSIGNED, REPORT_FEEDBACK, REPORT_REVISION_REQUESTED, DEADLINE]}, title: {type: string}, body: {type: string}, target: {$ref: '#/components/schemas/Target'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, read: {type: boolean}}
+    NotificationPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Notification'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    AiJobRequest:
+      oneOf:
+        - type: object
+          required: [kind, postingId]
+          properties: {kind: {type: string, enum: [MATCH_EXPLANATION]}, postingId: {$ref: '#/components/schemas/Id'}}
+        - type: object
+          required: [kind, reportId]
+          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}, reportId: {$ref: '#/components/schemas/Id'}}
+    AiJob:
+      type: object
+      required: [id, kind, status, advisory, createdAt]
+      properties: {id: {$ref: '#/components/schemas/Id'}, kind: {type: string, enum: [MATCH_EXPLANATION, REPORT_SUMMARY]}, status: {type: string, enum: [PENDING, PROCESSING, SUCCEEDED, FAILED]}, advisory: {type: boolean, enum: [true]}, generatedContent: {type: string, description: Present only when succeeded; not a source record or decision.}, errorCode: {type: string, description: Safe, non-sensitive failure reason.}, createdAt: {$ref: '#/components/schemas/Timestamp'}, completedAt: {$ref: '#/components/schemas/Timestamp'}}
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties: {type: {type: string, format: uri}, title: {type: string}, status: {type: integer}, detail: {type: string}, instance: {type: string}}
+    ValidationProblem:
+      allOf:
+        - {$ref: '#/components/schemas/Problem'}
+        - type: object
+          properties: {errors: {type: array, items: {type: object, required: [field, message], properties: {field: {type: string}, message: {type: string}, code: {type: string}}}}}
