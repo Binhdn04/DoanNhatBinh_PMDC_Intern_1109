@@ -1,100 +1,82 @@
 # Runtime Sequences
 
-These are **target-production** interactions. The current React/Vite application is a mock-data prototype and does not yet make these calls.
+These target-production interactions expand the [canonical C4 overview](../c4.md). The current React/Vite application remains a mock-data prototype and does not yet make these calls.
 
-## 1. Happy path — internship discovery and deterministic match
+## 1. Synchronous discovery and deterministic Match Score
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Student
   participant SPA as React SPA
-  participant API as Internships API
+  participant API as InternHub API
   participant DB as PostgreSQL
-  participant Score as MatchScoreCalculator
-  participant Outbox as Jobs / outbox
+  participant Score as Match Score calculator
 
-  Student->>SPA: Search and filter internships
-  SPA->>API: GET /api/v1/internships?query&filters
-  API->>DB: Query eligible open internships and student skills
-  DB-->>API: Postings and skills
-  API->>Score: calculate(studentSkills, requirements)
-  Score-->>API: score, matchedSkills, missingSkills
-  API->>Outbox: Optionally append explanation job
-  API-->>SPA: 200 ranked results and score breakdown
+  Student->>SPA: Search and filter eligible postings
+  SPA->>API: GET postings with search/filter/sort values
+  API->>DB: Read eligible postings and student skills
+  DB-->>API: Posting and skill data
+  API->>Score: Calculate deterministic breakdown
+  Score-->>API: Score, matched skills, missing skills
+  API-->>SPA: Results and source score breakdown
   SPA-->>Student: Render results immediately
 ```
 
-The Match Score never waits for an LLM; an explanation is optional enrichment.
+Search and deterministic scoring never wait for AI. The score remains advisory and cannot change opportunity visibility, application eligibility, or a hiring decision.
 
-## 2. Failure path — AI explanation fails without failing search
+## 2. Requested AI enrichment and fallback
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Worker
-  participant Jobs as PostgreSQL jobs/outbox
-  participant AI as AI adapter
+  actor User as Authorized student or supervisor
+  participant SPA as React SPA
+  participant API as InternHub API
+  participant DB as PostgreSQL AI jobs
+  participant Worker as AI worker
   participant LLM as LLM provider
-  participant Match as Match-score record
 
-  Worker->>Jobs: Claim explanation job (lease)
-  Worker->>AI: Generate minimized explanation input
-  AI->>LLM: Request explanation
-  LLM--x AI: Timeout or provider error
-  AI-->>Worker: Retryable failure
-  Worker->>Jobs: Record attempt; schedule exponential retry
-  Worker->>Match: Keep explanation null and score available
-  Note over Jobs,Match: Student can still use deterministic results.
-```
-
-## 3. Worker crash during a durable job
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant API
-  participant DB as PostgreSQL
-  participant W1 as Worker A
-  participant W2 as Worker B
-  participant Provider as Email / LLM provider
-
-  API->>DB: Commit domain change and pending job atomically
-  W1->>DB: Claim job with lease and idempotency key
-  W1->>Provider: Send request
-  Note over W1: Process crashes before completion is recorded
-  W2->>DB: Find expired lease
-  W2->>DB: Reclaim job
-  W2->>Provider: Retry using idempotency key
-  Provider-->>W2: Accepted / duplicate-safe result
-  W2->>DB: Mark completed
-```
-
-An integration must support an idempotency key, or the worker must persist a provider-delivery identifier before retrying, to prevent duplicate messages.
-
-## 4. Retry, compensation, and dead-lettering
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Worker
-  participant Jobs as Jobs / outbox
-  participant Provider as External provider
-  participant Ops as Operations
-
-  Worker->>Jobs: Claim pending job
-  Worker->>Provider: Execute side effect
-  alt Transient failure and attempts remain
-    Provider--x Worker: 5xx / timeout
-    Worker->>Jobs: Store error and next_attempt_at
-  else Permanent failure or attempts exhausted
-    Provider--x Worker: Invalid request / final failure
-    Worker->>Jobs: Move to dead-letter state
-    Worker->>Ops: Emit alert and correlation ID
-  else Success
-    Provider-->>Worker: Success
-    Worker->>Jobs: Mark completed
+  User->>SPA: Request explanation or summary
+  SPA->>API: POST authorized AI request
+  API->>DB: Persist pending job after source authorization
+  API-->>SPA: Accepted with pending status
+  Worker->>DB: Claim job with lease
+  Worker->>LLM: Send minimized authorized input
+  alt Provider succeeds
+    LLM-->>Worker: Generated advisory output
+    Worker->>DB: Persist result and succeeded status
+  else Provider is slow or fails
+    LLM--x Worker: Timeout or error
+    Worker->>DB: Persist retryable or failed status
   end
+  SPA->>API: Refresh generated-result status
+  API-->>SPA: Advisory output or unavailable state
 ```
 
-Compensation applies only to external side effects that can be safely reversed (for example, canceling a queued notification). A committed application status, audit entry, task, or report is not rolled back merely because enrichment or delivery failed.
+The original report and deterministic score breakdown remain available in both outcomes. A failed job never rolls back a source record or blocks a core workflow.
+
+## 3. Transactional application change and in-app notification
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Staff as Authorized Company Staff or Admin
+  participant SPA as React SPA
+  participant API as InternHub API
+  participant DB as PostgreSQL
+
+  Staff->>SPA: Confirm allowed application transition
+  SPA->>API: PATCH application status and note
+  API->>API: Authorize and validate state transition
+  API->>DB: Begin transaction
+  API->>DB: Update current status and append immutable history
+  opt Accepted
+    API->>DB: Create exactly one placement
+  end
+  API->>DB: Create recipient-scoped in-app notification
+  API->>DB: Commit transaction
+  API-->>SPA: Updated application/history
+```
+
+The notification record is committed with the event that caused it; no worker or external delivery provider is involved.

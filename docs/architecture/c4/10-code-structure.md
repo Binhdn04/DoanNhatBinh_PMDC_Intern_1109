@@ -1,5 +1,7 @@
 # Target Code Structure
 
+This supplementary repository view describes the intended implementation boundaries. The API, worker, shared packages, and infrastructure remain planned; the web application currently contains a React/Vite mock-data prototype.
+
 ```mermaid
 flowchart TB
   Root[InternHub repository]
@@ -8,16 +10,19 @@ flowchart TB
   Root --> Worker[apps/worker]
   Root --> Packages[packages]
   Root --> Infra[infra]
-  Root --> Docs[docs/architecture]
-  Web --> WebApp[src/app: routing, providers]
-  Web --> Features[src/features: discovery, applications, progress, profile]
+  Root --> Docs[docs]
+
+  Web --> WebApp[src/app: shell and future routing]
+  Web --> Features[src/features: discovery, applications, progress, evaluation, profile, admin]
   Web --> Shared[src/shared: UI, API client, auth, utilities]
-  API --> Modules[src/modules: identity, organization, internships, applications, placements, notifications, ai]
+
+  API --> Modules[src/modules: identity, organizations, postings, applications, placements, evaluations, monitoring, notifications, documents, ai]
   API --> Bootstrap[src/main and infrastructure wiring]
-  Worker --> Consumers[Job consumers and scheduling]
-  Packages --> Contracts[contracts: REST DTO types]
-  Packages --> Domain[domain: pure match and state-machine logic]
+  Worker --> Consumers[AI job consumers and scheduling]
+
+  Packages --> Contracts[contracts: versioned REST DTO types]
+  Packages --> Domain[domain: pure matching and lifecycle rules]
   Infra --> Compose[docker-compose and deployment configuration]
 ```
 
-The React/Vite prototype now lives in `apps/web/` and is split into `app`, feature, shared UI, and style folders while retaining frontend mock data. The API, worker, package, and infrastructure portions remain planned boundaries.
+The Presentation tier is `apps/web`. The Application tier is `apps/api` plus the AI-only `apps/worker`; `packages/domain` keeps framework-independent rules. PostgreSQL/object-storage adapters belong to the API's infrastructure wiring and remain private to the application tier.
