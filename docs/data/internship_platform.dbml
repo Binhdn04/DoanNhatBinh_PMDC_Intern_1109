@@ -1,163 +1,51 @@
-// =========================================================
-// Smart Internship Management - Database Schema (DBML)
-// View at https://dbdiagram.io
-// =========================================================
+// InternHub target PostgreSQL schema (DBML)
+// Canonical design, lifecycle rules, and migration notes: ../database/database-design.md
+// View at https://dbdiagram.io. This is a target design, not an executable migration.
 
-// ---------- Core identity ----------
-
-Table users {
-  id uuid [pk, default: `gen_random_uuid()`]
-  email varchar [unique, not null]
-  password_hash varchar [not null]
-  role user_role [not null]
-  full_name varchar [not null]
-  avatar_url varchar
-  created_at timestamp [default: `now()`]
-  updated_at timestamp
-}
-
-Enum user_role {
+Enum role_code {
   student
+  company_staff
   supervisor
   admin
 }
-
-Table students {
-  id uuid [pk, ref: - users.id]
-  university varchar
-  major varchar
-  graduation_year int
-  bio text
-  cv_url varchar
-  resume_updated_at timestamp
-}
-
-Table companies {
-  id uuid [pk, default: `gen_random_uuid()`]
-  name varchar [not null]
-  logo_url varchar
-  website varchar
-  industry varchar
-  description text
-  created_at timestamp [default: `now()`]
-}
-
-Table supervisors {
-  id uuid [pk, ref: - users.id]
-  company_id uuid [not null, ref: > companies.id]
-  title varchar
-  department varchar
-}
-
-// ---------- 1. Internship Discovery & Matching ----------
-
-Table skills {
-  id uuid [pk, default: `gen_random_uuid()`]
-  name varchar [unique, not null]
-  category varchar
-}
-
-Table student_skills {
-  student_id uuid [ref: > students.id]
-  skill_id uuid [ref: > skills.id]
-  proficiency proficiency_level [default: 'intermediate']
-  source skill_source [default: 'self_reported']
-
-  Indexes {
-    (student_id, skill_id) [pk]
-  }
-}
-
 Enum proficiency_level {
   beginner
   intermediate
   advanced
 }
-
-Enum skill_source {
-  self_reported
-  cv_extracted
-  verified
-}
-
-Table internships {
-  id uuid [pk, default: `gen_random_uuid()`]
-  company_id uuid [not null, ref: > companies.id]
-  supervisor_id uuid [ref: > supervisors.id]
-  title varchar [not null]
-  description text
-  category varchar
-  location varchar
-  work_mode work_mode [default: 'onsite']
-  duration_months int
-  openings int [default: 1]
-  status internship_status [default: 'open']
-  search_vector tsvector // for keyword search
-  published_at timestamp
-  application_deadline timestamp
-  created_at timestamp [default: `now()`]
-
-  Indexes {
-    (category, location)
-    search_vector [type: gin]
-  }
-}
-
-Enum work_mode {
+Enum work_arrangement {
   onsite
   remote
   hybrid
 }
-
-Enum internship_status {
+Enum posting_status {
   draft
   open
   closed
   archived
 }
-
-Table internship_skills {
-  internship_id uuid [ref: > internships.id]
-  skill_id uuid [ref: > skills.id]
-  required boolean [default: true] // false = "nice to have"
-
-  Indexes {
-    (internship_id, skill_id) [pk]
-  }
+Enum skill_importance {
+  required
+  optional
 }
-
-Table match_scores {
-  id uuid [pk, default: `gen_random_uuid()`]
-  student_id uuid [not null, ref: > students.id]
-  internship_id uuid [not null, ref: > internships.id]
-  score decimal(5,2) [not null] // 0-100
-  matched_skills jsonb // ["Figma", "Prototyping"]
-  missing_skills jsonb // ["Usability testing"]
-  explanation text // "Why this matches you" LLM output
-  computed_at timestamp [default: `now()`]
-
-  Indexes {
-    (student_id, internship_id) [unique]
-  }
+Enum document_state {
+  pending
+  available
+  rejected
+  deleted
 }
-
-// ---------- 2. Internship Application Management ----------
-
-Table applications {
-  id uuid [pk, default: `gen_random_uuid()`]
-  student_id uuid [not null, ref: > students.id]
-  internship_id uuid [not null, ref: > internships.id]
-  cover_note text
-  availability varchar
-  status application_status [default: 'submitted']
-  submitted_at timestamp [default: `now()`]
-  updated_at timestamp
-
-  Indexes {
-    (student_id, internship_id) [unique]
-  }
+Enum student_document_kind {
+  cv
+  portfolio
+  transcript
+  other
 }
-
+Enum application_document_kind {
+  cover_letter
+  portfolio
+  transcript
+  other
+}
 Enum application_status {
   submitted
   under_review
@@ -166,163 +54,506 @@ Enum application_status {
   rejected
   withdrawn
 }
-
-Table application_status_history {
-  id uuid [pk, default: `gen_random_uuid()`]
-  application_id uuid [not null, ref: > applications.id]
-  from_status application_status
-  to_status application_status [not null]
-  changed_by uuid [ref: > users.id]
-  note text
-  changed_at timestamp [default: `now()`]
-}
-
-Table application_documents {
-  id uuid [pk, default: `gen_random_uuid()`]
-  application_id uuid [not null, ref: > applications.id]
-  doc_type document_type [not null]
-  file_url varchar [not null]
-  file_name varchar
-  uploaded_at timestamp [default: `now()`]
-}
-
-Enum document_type {
-  cv
-  cover_letter
-  portfolio
-  transcript
-  other
-}
-
-Table ai_interviews {
-  id uuid [pk, default: `gen_random_uuid()`]
-  application_id uuid [not null, ref: - applications.id]
-  status interview_status [default: 'pending']
-  transcript jsonb // array of {question, answer}
-  ai_score decimal(5,2)
-  ai_summary text
-  started_at timestamp
-  completed_at timestamp
-}
-
-Enum interview_status {
-  pending
-  in_progress
-  completed
-  expired
-}
-
-// ---------- 3. Internship Progress Management ----------
-
-Table internship_placements {
-  id uuid [pk, default: `gen_random_uuid()`]
-  application_id uuid [not null, ref: - applications.id]
-  student_id uuid [not null, ref: > students.id]
-  internship_id uuid [not null, ref: > internships.id]
-  supervisor_id uuid [ref: > supervisors.id]
-  start_date date
-  end_date date
-  placement_status placement_status [default: 'active']
-}
-
 Enum placement_status {
   active
   completed
   terminated
 }
-
-Table tasks {
-  id uuid [pk, default: `gen_random_uuid()`]
-  placement_id uuid [not null, ref: > internship_placements.id]
-  assigned_by uuid [ref: > supervisors.id]
-  title varchar [not null]
-  description text
-  status task_status [default: 'todo']
-  due_date date
-  created_at timestamp [default: `now()`]
-  updated_at timestamp
+Enum task_priority {
+  low
+  medium
+  high
 }
-
 Enum task_status {
   todo
   in_progress
   done
 }
-
-Table weekly_reports {
-  id uuid [pk, default: `gen_random_uuid()`]
-  placement_id uuid [not null, ref: > internship_placements.id]
-  week_start date [not null]
-  week_end date [not null]
-  content text [not null] // student's raw report
-  ai_summary text // LLM-generated summary
-  submitted_at timestamp [default: `now()`]
-
-  Indexes {
-    (placement_id, week_start) [unique]
-  }
+Enum report_state {
+  draft
+  submitted
+  revision_requested
+  approved
 }
-
-Table report_feedback {
-  id uuid [pk, default: `gen_random_uuid()`]
-  report_id uuid [not null, ref: > weekly_reports.id]
-  supervisor_id uuid [not null, ref: > supervisors.id]
-  comment text [not null]
-  rating int // optional 1-5
-  created_at timestamp [default: `now()`]
+Enum report_review_outcome {
+  approved
+  revision_requested
 }
-
-Table self_assessments {
-  id uuid [pk, default: `gen_random_uuid()`]
-  placement_id uuid [not null, ref: - internship_placements.id]
-  content text [not null]
-  learning_outcomes text
-  submitted_at timestamp [default: `now()`]
+Enum assessment_state {
+  draft
+  submitted
 }
-
-Table evaluations {
-  id uuid [pk, default: `gen_random_uuid()`]
-  placement_id uuid [not null, ref: - internship_placements.id]
-  supervisor_id uuid [not null, ref: > supervisors.id]
-  performance_rating int
-  overall_score decimal(5,2)
-  completion_decision completion_decision [default: 'pending']
-  evaluated_at timestamp [default: `now()`]
-}
-
 Enum completion_decision {
   pending
   passed
   failed
   incomplete
 }
-
-Table company_admins {
-  id uuid [pk, ref: - users.id]
-  company_id uuid [not null, ref: > companies.id]
-  title varchar
+Enum notification_type {
+  application_status
+  task_assigned
+  report_feedback
+  report_revision
+  deadline
+  system
+}
+Enum notification_target_type {
+  application
+  placement
+  task
+  report
+  posting
+}
+Enum ai_job_kind {
+  match_explanation
+  report_summary
+}
+Enum ai_job_status {
+  pending
+  processing
+  succeeded
+  failed
 }
 
-Table notifications {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  type notification_type [not null]
-  title varchar [not null]
-  message text
-  related_entity_type varchar
-  related_entity_id uuid
-  is_read boolean [default: false]
-  created_at timestamp [default: `now()`]
+// ---------- Identity, organization, and profile ----------
 
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email citext [not null, unique]
+  password_hash text [not null]
+  full_name varchar(200) [not null]
+  phone varchar(40)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table user_roles {
+  user_id uuid [not null, ref: > users.id]
+  role role_code [not null]
   Indexes {
-    (user_id, is_read)
+    (user_id, role) [pk]
   }
 }
 
-Enum notification_type {
-  deadline_reminder
-  status_change
-  new_feedback
-  new_task
-  system
+Table programs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  code varchar(50) [not null, unique]
+  name varchar(200) [not null]
+  active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 }
+
+Table academic_terms {
+  id uuid [pk, default: `gen_random_uuid()`]
+  program_id uuid [not null, ref: > programs.id]
+  name varchar(100) [not null]
+  starts_on date [not null]
+  ends_on date [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (program_id, name) [unique]
+  }
+  Note: 'CHECK (ends_on >= starts_on)'
+}
+
+Table student_profiles {
+  user_id uuid [pk, ref: - users.id]
+  program_id uuid [not null, ref: > programs.id]
+  university varchar(200) [not null]
+  major varchar(200) [not null]
+  graduation_year smallint
+  bio text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table student_preferences {
+  student_id uuid [pk, ref: - student_profiles.user_id]
+  industries text[]
+  locations text[]
+  work_arrangements work_arrangement[]
+  min_duration_weeks smallint
+  max_duration_weeks smallint
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: 'Duration bounds, when supplied, are positive and min <= max. Preferences order discovery only; they never exclude postings.'
+}
+
+Table skills {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(100) [not null]
+  normalized_name varchar(100) [not null, unique]
+  category varchar(100)
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table student_skills {
+  student_id uuid [not null, ref: > student_profiles.user_id]
+  skill_id uuid [not null, ref: > skills.id]
+  proficiency proficiency_level
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (student_id, skill_id) [pk]
+  }
+}
+
+Table companies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(200) [not null]
+  normalized_name varchar(200) [not null, unique]
+  website varchar(2048)
+  industry varchar(100)
+  description text
+  logo_document_id uuid [ref: > documents.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table company_staff {
+  company_id uuid [not null, ref: > companies.id]
+  user_id uuid [not null, ref: > users.id]
+  title varchar(120)
+  active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (company_id, user_id) [pk]
+    (company_id, active)
+  }
+}
+
+Table supervisor_profiles {
+  user_id uuid [pk, ref: - users.id]
+  title varchar(120)
+  department varchar(120)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+// ---------- Postings, discovery, saves, deterministic matching ----------
+
+Table postings {
+  id uuid [pk, default: `gen_random_uuid()`]
+  company_id uuid [not null, ref: > companies.id]
+  term_id uuid [ref: > academic_terms.id]
+  title varchar(200) [not null]
+  description text [not null]
+  category varchar(100)
+  location varchar(200)
+  work_arrangement work_arrangement [not null]
+  duration_weeks smallint [not null]
+  openings int [not null]
+  responsibilities text
+  benefits text
+  application_deadline date [not null]
+  status posting_status [not null, default: 'draft']
+  published_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (status, application_deadline, published_at)
+    (company_id, status)
+  }
+  Note: 'CHECK (openings > 0 AND duration_weeks > 0). Eligible is derived as status=open and deadline has not passed.'
+}
+
+Table posting_skills {
+  posting_id uuid [not null, ref: > postings.id]
+  skill_id uuid [not null, ref: > skills.id]
+  importance skill_importance [not null]
+  Indexes {
+    (posting_id, skill_id) [pk]
+    (skill_id, posting_id)
+  }
+  Note: 'Publishing validates skills in the application transaction/deferred trigger.'
+}
+
+Table saved_postings {
+  student_id uuid [not null, ref: > student_profiles.user_id]
+  posting_id uuid [not null, ref: > postings.id]
+  saved_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (student_id, posting_id) [pk]
+    (student_id, saved_at)
+  }
+  Note: 'Rows remain after a posting becomes unavailable; new saves require an eligible posting.'
+}
+
+// No match_scores table: score is a deterministic API projection of student_skills and
+// posting_skills. Optional AI explanation is represented only by ai_jobs.
+
+// ---------- Documents, applications, and placement ----------
+
+Table documents {
+  id uuid [pk, default: `gen_random_uuid()`]
+  owner_user_id uuid [not null, ref: > users.id]
+  object_key varchar(512) [not null, unique]
+  original_name varchar(255) [not null]
+  content_type varchar(127) [not null]
+  size_bytes bigint [not null]
+  sha256 char(64) [not null]
+  state document_state [not null, default: 'pending']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: 'CHECK (size_bytes > 0). Private object storage holds bytes; this table holds metadata only.'
+}
+
+Table student_documents {
+  student_id uuid [not null, ref: > student_profiles.user_id]
+  document_id uuid [not null, ref: > documents.id]
+  kind student_document_kind [not null]
+  is_default_cv boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (student_id, document_id) [pk]
+  }
+  Note: 'Unique partial index: (student_id) WHERE is_default_cv.'
+}
+
+Table applications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  student_id uuid [not null, ref: > student_profiles.user_id]
+  posting_id uuid [not null, ref: > postings.id]
+  status application_status [not null, default: 'submitted']
+  contact_name varchar(200) [not null]
+  contact_email citext [not null]
+  contact_phone varchar(40)
+  university varchar(200) [not null]
+  major varchar(200) [not null]
+  graduation_year smallint
+  availability text [not null]
+  cover_note text
+  cv_document_id uuid [not null, ref: > documents.id]
+  submitted_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (student_id, posting_id) [unique]
+    (posting_id, status, submitted_at)
+    (student_id, submitted_at)
+  }
+  Note: 'Contact and education are submission-time snapshots. The unique key includes terminal applications.'
+}
+
+Table application_documents {
+  application_id uuid [not null, ref: > applications.id]
+  document_id uuid [not null, ref: > documents.id]
+  kind application_document_kind [not null]
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (application_id, document_id) [pk]
+  }
+}
+
+Table application_status_history {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, ref: > applications.id]
+  from_status application_status
+  to_status application_status [not null]
+  actor_user_id uuid [not null, ref: > users.id]
+  note text
+  changed_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (application_id, changed_at)
+  }
+  Note: 'Append-only. The initial row is NULL -> submitted.'
+}
+
+Table placements {
+  id uuid [pk, default: `gen_random_uuid()`]
+  application_id uuid [not null, unique, ref: - applications.id]
+  student_id uuid [not null, ref: > student_profiles.user_id]
+  posting_id uuid [not null, ref: > postings.id]
+  company_id uuid [not null, ref: > companies.id]
+  term_id uuid [ref: > academic_terms.id]
+  start_date date [not null]
+  end_date date [not null]
+  status placement_status [not null, default: 'active']
+  ended_at timestamptz
+  ended_by_user_id uuid [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (student_id, status)
+    (company_id, status)
+  }
+  Note: 'CHECK (end_date >= start_date). Created exactly once by accepted-application transaction.'
+}
+
+Table placement_supervisor_assignments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: > placements.id]
+  supervisor_user_id uuid [not null, ref: > users.id]
+  assigned_at timestamptz [not null, default: `now()`]
+  revoked_at timestamptz
+  assigned_by_user_id uuid [not null, ref: > users.id]
+  Indexes {
+    (placement_id, revoked_at)
+    (supervisor_user_id, placement_id)
+  }
+  Note: 'Unique partial index: (placement_id) WHERE revoked_at IS NULL; history remains after revocation.'
+}
+
+// ---------- Progress, reports, and separate assessments ----------
+
+Table tasks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: > placements.id]
+  created_by_user_id uuid [not null, ref: > users.id]
+  title varchar(200) [not null]
+  description text [not null]
+  priority task_priority [not null, default: 'medium']
+  due_date date
+  status task_status [not null, default: 'todo']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (placement_id, status, due_date)
+  }
+  Note: 'Title and description are non-empty. Overdue is a query/UI derivation, never stored.'
+}
+
+Table weekly_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, ref: > placements.id]
+  week_start date [not null]
+  week_end date [not null]
+  state report_state [not null, default: 'draft']
+  draft_accomplishments text
+  draft_challenges text
+  draft_next_week_plan text
+  current_version_no int [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (placement_id, week_start) [unique]
+    (placement_id, week_start)
+  }
+  Note: 'CHECK (week_end >= week_start). Draft stays private until a submitted version exists.'
+}
+
+Table report_versions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  report_id uuid [not null, ref: > weekly_reports.id]
+  version_no int [not null]
+  accomplishments text [not null]
+  challenges text [not null]
+  next_week_plan text [not null]
+  submitted_by_user_id uuid [not null, ref: > users.id]
+  submitted_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (report_id, version_no) [unique]
+  }
+  Note: 'Append-only submitted snapshot; all content fields must be non-empty.'
+}
+
+Table report_version_documents {
+  report_version_id uuid [not null, ref: > report_versions.id]
+  document_id uuid [not null, ref: > documents.id]
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (report_version_id, document_id) [pk]
+  }
+}
+
+Table report_reviews {
+  id uuid [pk, default: `gen_random_uuid()`]
+  report_version_id uuid [not null, ref: > report_versions.id]
+  outcome report_review_outcome [not null]
+  feedback text
+  reviewed_by_user_id uuid [not null, ref: > users.id]
+  reviewed_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (report_version_id, reviewed_at)
+  }
+  Note: 'Append-only. revision_requested requires non-empty feedback; one final review per submitted version.'
+}
+
+Table self_assessments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, unique, ref: - placements.id]
+  status assessment_state [not null, default: 'draft']
+  ratings jsonb [not null, default: `'{}'`]
+  reflection text
+  learning_outcomes text
+  submitted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: 'Student-owned; submitted-field validation is application-level. No completion decision exists.'
+}
+
+Table performance_evaluations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  placement_id uuid [not null, unique, ref: - placements.id]
+  author_user_id uuid [not null, ref: > users.id]
+  status assessment_state [not null, default: 'draft']
+  ratings jsonb [not null, default: `'{}'`]
+  comments text
+  completion_decision completion_decision [not null, default: 'pending']
+  submitted_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Note: 'Supervisor/Admin-owned and separate from self_assessments. No overall score or academic-grade column.'
+}
+
+// ---------- Notifications, audit, and optional advisory AI ----------
+
+Table notifications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  recipient_user_id uuid [not null, ref: > users.id]
+  type notification_type [not null]
+  title varchar(200) [not null]
+  body text
+  target_type notification_target_type
+  target_id uuid
+  created_at timestamptz [not null, default: `now()`]
+  read_at timestamptz
+  Indexes {
+    (recipient_user_id, read_at, created_at)
+  }
+  Note: 'target_type/target_id is an application-authorized polymorphic reference. In-app only; inserted with its triggering transaction.'
+}
+
+Table audit_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  subject_type varchar(80) [not null]
+  subject_id uuid [not null]
+  event_type varchar(100) [not null]
+  actor_user_id uuid [ref: > users.id]
+  payload jsonb [not null, default: `'{}'`]
+  occurred_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (subject_type, subject_id, occurred_at)
+  }
+  Note: 'Append-only general audit; polymorphic subject validation is application-owned.'
+}
+
+Table ai_jobs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  requested_by_user_id uuid [not null, ref: > users.id]
+  kind ai_job_kind [not null]
+  posting_id uuid [ref: > postings.id]
+  report_version_id uuid [ref: > report_versions.id]
+  input_fingerprint char(64) [not null]
+  status ai_job_status [not null, default: 'pending']
+  attempts smallint [not null, default: 0]
+  available_at timestamptz [not null, default: `now()`]
+  claimed_at timestamptz
+  completed_at timestamptz
+  provider_reference varchar(200)
+  generated_content text
+  error_code varchar(80)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (status, available_at)
+  }
+  Note: 'CHECK: match_explanation has posting_id only; report_summary has report_version_id only. Partial unique fingerprint prevents duplicate active/successful jobs. Content is optional advisory output and never changes human decisions.'
+}
+
+// All foreign keys default to ON DELETE RESTRICT for retained business records.
+// Authorization remains in the application tier: relationships alone do not grant access.
+// Excluded: AI interviews, automated screening/decisions, semantic-search embeddings,
+// external notification delivery, persisted match scores, and combined evaluation scores.
