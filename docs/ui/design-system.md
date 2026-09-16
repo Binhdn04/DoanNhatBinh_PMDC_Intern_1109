@@ -103,3 +103,11 @@ Use text and icon/label redundantly. Maintain at least WCAG AA contrast (4.5:1 f
 Retain the prototype’s restrained blue-on-neutral visual language, filter bar, opportunity cards, skill tags, progress bars with text values, status badges, audit-like timelines, and desktop main-content/sidebar composition. Normalize them under the rules above so they work across all roles and small screens.
 
 Do not document or design simulated interviews, interview retakes/results, AI screening, AI applicant scoring, AI-selected task/status/evaluation outcomes, or external email/SMS/push delivery. They are outside the current requirements.
+
+## Corrected workflow interaction rules
+
+Required text fields reject whitespace-only values and associate errors with the input. Acceptance uses a labelled searchable supervisor selector plus start/end date fields; assignment replacement/revocation confirms the outgoing/incoming supervisor and required reason. Do not present raw user IDs as the selection label.
+
+Display due dates with their recorded timezone and show version numbers beside report feedback and generated summaries. Private revision drafts have an explicit “Only you can see this draft” label; prior submitted history remains visually separate. Stale-version conflicts retain feedback but require reviewing the refreshed version before a new decision. Role switching exposes pending/error states and does not display the destination role's data before server confirmation.
+
+An empty skill set uses a neutral no-skills explanation rather than a negative suitability judgment. File controls disclose the supported PDF/JPEG/PNG/DOCX types and 10 MiB limit and preserve form input across transfer errors. [Behavior rules](../design/behavior-rules.md) define the source policies; UI styling never substitutes for authorization.

@@ -8,6 +8,12 @@ info:
     session/token and enforced with the caller's record relationship. AI endpoints
     are optional advisory enrichment only. There are no AI interview, screening,
     automated-decision, semantic-search, or external-notification endpoints.
+    All protected operations can return 401 for an invalid session and 403 for
+    a forbidden role/relationship. Malformed DTOs return 400. Required text is
+    trimmed and must contain a non-whitespace character; lifecycle-dependent
+    validation (publish/submit) also checks required content. Report privacy may
+    return 404 instead of disclosing a private draft. Behavioral rules and
+    acceptance scenarios are in docs/design/behavior-rules.md and traceability.md.
 servers:
   - url: /api/v1
     description: Same-origin production API
@@ -35,6 +41,64 @@ paths:
       responses:
         '200': {description: Current identity, content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /me/active-role:
+    put:
+      tags: [Identity]
+      summary: Select a permitted role and rotate the current session token
+      description: Validate current user_roles; lock the session and increment its version when changing role. Old tokens for this session then return 401. Selecting the existing role is a no-op. Other sessions are unchanged. See identity protocol in arc42.
+      operationId: setActiveRole
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ActiveRoleInput'}}}}
+      responses:
+        '200': {description: Authoritative identity and replacement bearer token, content: {application/json: {schema: {$ref: '#/components/schemas/RoleSession'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /supervisors:
+    get:
+      tags: [Placements]
+      summary: Find eligible supervisors for acceptance or Admin assignment management
+      description: Supply exactly one applicationId or placementId. Own-company Staff/Admin may query an application; only Admin may query a placement. Eligibility means a user currently holds SUPERVISOR and a supervisor profile. No company or program restriction is imposed in v1. This lookup grants no placement access.
+      operationId: listEligibleSupervisors
+      parameters:
+        - {name: applicationId, in: query, schema: {$ref: '#/components/schemas/Id'}}
+        - {name: placementId, in: query, schema: {$ref: '#/components/schemas/Id'}}
+        - {$ref: '#/components/parameters/Search'}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200': {description: Eligible supervisor page, content: {application/json: {schema: {$ref: '#/components/schemas/SupervisorPage'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /placements/{placementId}/supervisor-assignments:
+    get:
+      tags: [Placements]
+      summary: Get retained supervisor assignment history as Admin
+      operationId: listSupervisorAssignments
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses:
+        '200': {description: Assignment history ordered by assignedAt, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SupervisorAssignment'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Placements]
+      summary: Assign, replace, or revoke an Active placement supervisor as Admin
+      description: Lock placement and compare expectedAssignmentId to its active assignment (null means unassigned). Revoke the prior row and optionally insert the replacement atomically. Retain actor, time, and reason. Same supervisor is a no-op; stale expected assignment returns 409. Access is checked on every subsequent request.
+      operationId: changeSupervisorAssignment
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AssignmentChangeInput'}}}}
+      responses:
+        '200': {description: Updated placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /placements/{placementId}/reporting-periods:
+    get:
+      tags: [Reports]
+      summary: List canonical reporting weeks and deadlines including weeks with no report
+      operationId: listReportingPeriods
+      parameters: [{$ref: '#/components/parameters/PlacementId'}]
+      responses:
+        '200': {description: Periods in ascending week order for an authorized placement participant, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ReportingPeriod'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /students/me:
     get:
       tags: [Students]
@@ -53,6 +117,13 @@ paths:
         '400': {$ref: '#/components/responses/ValidationError'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /students/me/skills:
+    get:
+      tags: [Students]
+      summary: Reload the current Student skill set including stable skill IDs and optional proficiency
+      operationId: getMySkills
+      responses:
+        '200': {description: Current skills, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StudentSkill'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
     put:
       tags: [Students]
       summary: Replace the current Student skill set
@@ -92,17 +163,42 @@ paths:
   /documents/{documentId}:
     delete:
       tags: [Documents]
-      summary: Remove a reusable document link when it is not retained by a submitted record
+      summary: Remove a reusable document link when no draft or submitted record retains it
       operationId: deleteDocument
       parameters: [{$ref: '#/components/parameters/DocumentId'}]
       responses:
         '204': {description: Removed}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /documents/{documentId}/content:
+    parameters:
+      - {$ref: '#/components/parameters/DocumentId'}
+      - {name: transferToken, in: query, required: true, schema: {type: string}, description: 'API-signed five-minute authorization bound to user session, document, and HTTP method; bearer authentication and current record authorization are also required.'}
+    put:
+      tags: [Documents]
+      summary: Stream document bytes through the API to private storage
+      description: Only the owner of a PENDING document may upload. Token binds declared size, media type and digest. Limit 10 MiB; PDF, JPEG, PNG or DOCX only. Verify actual bytes, digest and signature before completion. Repeating the same bytes before completion is safe; AVAILABLE documents cannot be overwritten.
+      operationId: uploadDocumentContent
+      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+      responses:
+        '204': {description: Bytes stored pending completion}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {description: File exceeds 10 MiB}
+    get:
+      tags: [Documents]
+      summary: Stream an authorized AVAILABLE document through the API
+      operationId: downloadDocumentContent
+      responses:
+        '200': {description: File bytes with safe Content-Disposition attachment filename, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /documents/{documentId}/complete:
     post:
       tags: [Documents]
-      summary: Finalize a private-document upload after object storage transfer
+      summary: Finalize a private-document upload after API-mediated transfer
+      description: Verify stored bytes against declared size and digest and supported file signatures. AVAILABLE completion retries return the same document; invalid bytes result in REJECTED. No browser storage transfer occurs.
       operationId: completeDocumentUpload
       parameters: [{$ref: '#/components/parameters/DocumentId'}]
       responses:
@@ -152,7 +248,7 @@ paths:
         - {name: location, in: query, schema: {type: string}}
         - {name: durationWeeks, in: query, schema: {type: integer, minimum: 1}}
         - {name: workArrangement, in: query, schema: {$ref: '#/components/schemas/WorkArrangement'}}
-        - {name: sort, in: query, schema: {type: string, enum: [relevance, newest, match_score]}}
+        - {name: sort, in: query, schema: {type: string, enum: [relevance, newest, match_score], default: relevance}, description: Stable ordering and preference dimensions follow skill-v1 behavior rules.}
         - {name: companyId, in: query, schema: {type: string, format: uuid}}
         - {name: includeUnavailable, in: query, schema: {type: boolean, default: false}}
       responses: {'200': {description: Posting page, content: {application/json: {schema: {$ref: '#/components/schemas/PostingPage'}}}}}
@@ -242,7 +338,7 @@ paths:
     post:
       tags: [Applications]
       summary: Move an application through an authorized staff/Admin transition
-      description: Accepting is idempotent and creates exactly one placement. Rejection is allowed from any staff-review non-terminal state.
+      description: Lock the application. From INTERVIEW, acceptance stores an immutable acceptance command and creates one placement, assignment, reporting calendar, history entry, and notification in one transaction. On ACCEPTED, an identical canonical supervisor/date/note command returns 200 with the existing placement link and no writes; different acceptance input returns 409 ACCEPTANCE_CONFLICT. Compare against the original command even after reassignment. Other terminal transitions return 409. Rejection is allowed from any staff-review non-terminal state.
       operationId: transitionApplicationStatus
       parameters: [{$ref: '#/components/parameters/ApplicationId'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationStatusTransitionInput'}}}}
@@ -323,6 +419,7 @@ paths:
     patch:
       tags: [Reports]
       summary: Save the current Student's draft or revision content
+      description: Draft input replaces the saved draft and attachment selection. reportingPeriodId cannot change. Only DRAFT or REVISION_REQUESTED on an Active owned placement; revision saves keep REVISION_REQUESTED until submission.
       operationId: saveReportDraft
       parameters: [{$ref: '#/components/parameters/ReportId'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportDraftInput'}}}}
@@ -337,7 +434,8 @@ paths:
   /reports/{reportId}/reviews:
     post:
       tags: [Reports]
-      summary: Approve or request revision of the current submitted report version
+      summary: Approve or request revision of the explicitly identified submitted version
+      description: Lock report and placement; require Active placement, SUBMITTED state and current version matching reportVersionId. Otherwise return 409 REPORT_VERSION_CONFLICT with no review or notification. One review per version; revision feedback must contain non-whitespace text.
       operationId: reviewReport
       parameters: [{$ref: '#/components/parameters/ReportId'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportReviewInput'}}}}
@@ -401,6 +499,7 @@ paths:
     post:
       tags: [AI jobs]
       summary: Request optional advisory AI explanation or summary
+      description: Student requests own match explanation; assigned Supervisor/Admin requests a specific submitted reportVersionId. Authorize source and persist immutable minimized input in the same consistent database snapshot. Reuse is scoped to requester, kind, source, input fingerprint and prompt version. Polling rechecks current source access.
       operationId: createAiJob
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AiJobRequest'}}}}
       responses: {'202': {description: Durable queued/reused AI job, content: {application/json: {schema: {$ref: '#/components/schemas/AiJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
@@ -431,7 +530,7 @@ components:
     Unauthorized: {description: Authentication is missing or invalid, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
     Forbidden: {description: Active role or record relationship is not authorized, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
     NotFound: {description: Resource does not exist or is not exposed to the caller, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-    Conflict: {description: Duplicate resource or invalid lifecycle state, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Conflict: {description: 'Duplicate resource, invalid lifecycle state, stale assignment/report version, or conflicting acceptance replay', content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
     ValidationError: {description: Request validation failed, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
     PublishValidationError: {description: Posting remains Draft; missing publish fields are identified, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
   schemas:
@@ -447,6 +546,53 @@ components:
     Id: {type: string, format: uuid}
     Timestamp: {type: string, format: date-time}
     Date: {type: string, format: date}
+    ActiveRoleInput:
+      type: object
+      required: [activeRole]
+      properties: {activeRole: {$ref: '#/components/schemas/Role'}}
+    RoleSession:
+      type: object
+      required: [me, accessToken, expiresAt]
+      properties: {me: {$ref: '#/components/schemas/Me'}, accessToken: {type: string}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+    Supervisor:
+      type: object
+      required: [id, fullName]
+      properties: {id: {$ref: '#/components/schemas/Id'}, fullName: {type: string}, department: {type: string}}
+    SupervisorPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/Supervisor'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+    AssignmentChangeInput:
+      type: object
+      required: [expectedAssignmentId, supervisorUserId, reason]
+      properties:
+        expectedAssignmentId: {type: string, format: uuid, nullable: true}
+        supervisorUserId: {type: string, format: uuid, nullable: true, description: Null revokes without replacement.}
+        reason: {type: string, minLength: 1, pattern: '\S', maxLength: 2000}
+    SupervisorAssignment:
+      type: object
+      required: [id, supervisor, assignedAt, assignedByUserId]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        supervisor: {$ref: '#/components/schemas/Supervisor'}
+        assignedAt: {$ref: '#/components/schemas/Timestamp'}
+        assignedByUserId: {$ref: '#/components/schemas/Id'}
+        reason: {type: string}
+        revokedAt: {$ref: '#/components/schemas/Timestamp'}
+        revokedByUserId: {$ref: '#/components/schemas/Id'}
+        revocationReason: {type: string}
+    ReportingPeriod:
+      type: object
+      required: [id, placementId, weekStart, weekEnd, dueAt, timezone, submissionState]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        placementId: {$ref: '#/components/schemas/Id'}
+        weekStart: {$ref: '#/components/schemas/Date'}
+        weekEnd: {$ref: '#/components/schemas/Date'}
+        dueAt: {$ref: '#/components/schemas/Timestamp'}
+        timezone: {type: string, example: Asia/Ho_Chi_Minh}
+        submissionState: {type: string, enum: [MISSING, DRAFT, SUBMITTED, REVISION_REQUESTED, APPROVED], description: DRAFT is exposed only to owner; other participants see MISSING until first submission.}
+        reportId: {$ref: '#/components/schemas/Id'}
     Me:
       type: object
       required: [id, email, fullName, activeRole, roles]
@@ -460,11 +606,11 @@ components:
       type: object
       required: [fullName, contactEmail, university, major]
       properties:
-        fullName: {type: string, maxLength: 200}
+        fullName: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
         contactEmail: {type: string, format: email}
         contactPhone: {type: string, maxLength: 40}
-        university: {type: string, maxLength: 200}
-        major: {type: string, maxLength: 200}
+        university: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
+        major: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
         graduationYear: {type: integer, minimum: 2000, maximum: 2200}
         bio: {type: string, maxLength: 5000}
     StudentProfile:
@@ -481,8 +627,9 @@ components:
     StudentSkillInput:
       type: object
       required: [name]
-      properties: {name: {type: string, maxLength: 100}, proficiency: {type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED]}}
+      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 100}, proficiency: {type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED]}}
     StudentSkill:
+      description: id is the canonical skills.id; proficiency is omitted when unset. PUT normalizes names, rejects duplicate normalized names and atomically replaces the complete set.
       allOf: [{$ref: '#/components/schemas/StudentSkillInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
     Preferences:
       type: object
@@ -497,18 +644,18 @@ components:
       required: [fileName, contentType, sizeBytes, sha256, kind]
       properties:
         fileName: {type: string, maxLength: 255}
-        contentType: {type: string, maxLength: 127}
-        sizeBytes: {type: integer, format: int64, minimum: 1}
+        contentType: {type: string, enum: [application/pdf, image/jpeg, image/png, application/vnd.openxmlformats-officedocument.wordprocessingml.document]}
+        sizeBytes: {type: integer, format: int64, minimum: 1, maximum: 10485760}
         sha256: {type: string, pattern: '^[A-Fa-f0-9]{64}$'}
         kind: {type: string, enum: [CV, PORTFOLIO, TRANSCRIPT, OTHER]}
     DocumentUpload:
       type: object
-      required: [document, uploadUrl]
-      properties: {document: {$ref: '#/components/schemas/Document'}, uploadUrl: {type: string, format: uri}}
+      required: [document, uploadUrl, expiresAt]
+      properties: {document: {$ref: '#/components/schemas/Document'}, uploadUrl: {type: string, format: uri, description: Absolute same-origin API content URL with transferToken; PUT using bearer authentication. Never a storage URL.}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
     DownloadUrl:
       type: object
       required: [url, expiresAt]
-      properties: {url: {type: string, format: uri}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+      properties: {url: {type: string, format: uri, description: Absolute same-origin API content URL with transferToken; GET using bearer authentication. Expires in five minutes.}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
     Document:
       type: object
       required: [id, fileName, contentType, sizeBytes, state, createdAt]
@@ -527,7 +674,7 @@ components:
     CompanyInput:
       type: object
       required: [name]
-      properties: {name: {type: string, maxLength: 200}, website: {type: string, format: uri}, industry: {type: string}, description: {type: string, maxLength: 10000}}
+      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 200}, website: {type: string, format: uri}, industry: {type: string}, description: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}}
     Company:
       allOf: [{$ref: '#/components/schemas/CompanyInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
     CompanyPage:
@@ -537,15 +684,15 @@ components:
     PostingSkillInput:
       type: object
       required: [name, importance]
-      properties: {name: {type: string, maxLength: 100}, importance: {type: string, enum: [REQUIRED, OPTIONAL]}}
+      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 100}, importance: {type: string, enum: [REQUIRED, OPTIONAL]}}
     PostingInput:
       type: object
       required: [companyId, title]
       properties:
         companyId: {$ref: '#/components/schemas/Id'}
         termId: {$ref: '#/components/schemas/Id'}
-        title: {type: string, maxLength: 200}
-        description: {type: string, maxLength: 20000}
+        title: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
+        description: {type: string, minLength: 1, pattern: '\S', maxLength: 20000}
         category: {type: string}
         location: {type: string}
         workArrangement: {$ref: '#/components/schemas/WorkArrangement'}
@@ -554,15 +701,17 @@ components:
         applicationDeadline: {$ref: '#/components/schemas/Date'}
         responsibilities: {type: string, maxLength: 20000}
         benefits: {type: string, maxLength: 20000}
-        skills: {type: array, items: {$ref: '#/components/schemas/PostingSkillInput'}}
+        skills: {type: array, description: Explicit declaration of both importance groups; empty array is allowed. Omission on a new draft leaves skills undeclared and fails publish; omission on edit preserves the prior declaration., items: {$ref: '#/components/schemas/PostingSkillInput'}}
     MatchScore:
+      description: skill-v1 weighted presence score as specified in design/behavior-rules.md; zero denominator produces 0 with NO_POSTING_SKILLS.
       type: object
-      required: [score, matchedSkills, missingSkills, calculationVersion, advisory]
+      required: [score, matchedSkills, missingSkills, calculationVersion, advisory, reason]
       properties:
         score: {type: integer, minimum: 0, maximum: 100}
         matchedSkills: {type: array, items: {type: string}}
         missingSkills: {type: array, items: {type: string}}
-        calculationVersion: {type: string}
+        calculationVersion: {type: string, enum: [skill-v1]}
+        reason: {type: string, enum: [SKILL_OVERLAP, NO_POSTING_SKILLS]}
         advisory: {type: boolean, enum: [true]}
     Posting:
       allOf:
@@ -589,17 +738,17 @@ components:
       properties: {targetStatus: {type: string, enum: [CLOSED, ARCHIVED]}, note: {type: string, maxLength: 2000}}
     ApplicationInput:
       type: object
-      required: [postingId, contactName, contactEmail, university, major, availability, cvDocumentId]
+      required: [postingId, contactName, contactEmail, university, major, availability, coverNote, cvDocumentId]
       properties:
         postingId: {$ref: '#/components/schemas/Id'}
-        contactName: {type: string, maxLength: 200}
+        contactName: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
         contactEmail: {type: string, format: email}
         contactPhone: {type: string, maxLength: 40}
-        university: {type: string, maxLength: 200}
-        major: {type: string, maxLength: 200}
+        university: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
+        major: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
         graduationYear: {type: integer}
-        availability: {type: string, maxLength: 4000}
-        coverNote: {type: string, maxLength: 10000}
+        availability: {type: string, minLength: 1, pattern: '\S', maxLength: 4000}
+        coverNote: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}
         cvDocumentId: {$ref: '#/components/schemas/Id'}
         additionalDocumentIds: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}
     StatusHistoryEntry:
@@ -634,7 +783,7 @@ components:
     NoteInput: {type: object, properties: {note: {type: string, maxLength: 4000}}}
     Placement:
       type: object
-      required: [id, applicationId, studentId, postingId, companyId, status, startDate, endDate]
+      required: [id, applicationId, studentId, postingId, companyId, status, startDate, endDate, reportingTimezone, studentName, postingTitle, companyName]
       properties:
         id: {$ref: '#/components/schemas/Id'}
         applicationId: {$ref: '#/components/schemas/Id'}
@@ -645,7 +794,12 @@ components:
         status: {$ref: '#/components/schemas/PlacementStatus'}
         startDate: {$ref: '#/components/schemas/Date'}
         endDate: {$ref: '#/components/schemas/Date'}
-        supervisor: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, fullName: {type: string}}}
+        supervisor: {$ref: '#/components/schemas/Supervisor'}
+        activeAssignmentId: {$ref: '#/components/schemas/Id'}
+        reportingTimezone: {type: string}
+        studentName: {type: string}
+        postingTitle: {type: string}
+        companyName: {type: string}
         taskSummary: {type: object, additionalProperties: {type: integer}}
         reportSummary: {type: object, additionalProperties: {type: integer}}
     PlacementPage:
@@ -659,34 +813,55 @@ components:
     TaskInput:
       type: object
       required: [title, description, priority]
-      properties: {title: {type: string, maxLength: 200}, description: {type: string, maxLength: 10000}, priority: {type: string, enum: [LOW, MEDIUM, HIGH]}, dueDate: {$ref: '#/components/schemas/Date'}}
+      properties: {title: {type: string, minLength: 1, pattern: '\S', maxLength: 200}, description: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}, priority: {type: string, enum: [LOW, MEDIUM, HIGH]}, dueDate: {$ref: '#/components/schemas/Date'}}
     TaskStatusInput: {type: object, required: [status], properties: {status: {$ref: '#/components/schemas/TaskStatus'}}}
     Task:
       allOf:
         - {$ref: '#/components/schemas/TaskInput'}
         - type: object
           required: [id, status, overdue, createdAt]
-          properties: {id: {$ref: '#/components/schemas/Id'}, status: {$ref: '#/components/schemas/TaskStatus'}, overdue: {type: boolean, description: Derived, never inferred progress.}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
+          properties: {id: {$ref: '#/components/schemas/Id'}, status: {$ref: '#/components/schemas/TaskStatus'}, overdue: {type: boolean, description: 'Derived, never inferred progress.'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
     ReportDraftInput:
       type: object
-      required: [weekStart, weekEnd]
-      properties: {weekStart: {$ref: '#/components/schemas/Date'}, weekEnd: {$ref: '#/components/schemas/Date'}, accomplishments: {type: string, maxLength: 20000}, challenges: {type: string, maxLength: 20000}, nextWeekPlan: {type: string, maxLength: 20000}, attachmentDocumentIds: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}}
+      required: [reportingPeriodId]
+      additionalProperties: false
+      properties:
+        reportingPeriodId: {$ref: '#/components/schemas/Id'}
+        accomplishments: {type: string, maxLength: 20000}
+        challenges: {type: string, maxLength: 20000}
+        nextWeekPlan: {type: string, maxLength: 20000}
+        attachmentDocumentIds: {type: array, uniqueItems: true, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}
     ReportVersion:
       type: object
       required: [id, versionNo, accomplishments, challenges, nextWeekPlan, submittedAt]
       properties: {id: {$ref: '#/components/schemas/Id'}, versionNo: {type: integer, minimum: 1}, accomplishments: {type: string}, challenges: {type: string}, nextWeekPlan: {type: string}, attachments: {type: array, items: {$ref: '#/components/schemas/Document'}}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}
     ReportReviewInput:
-      type: object
-      required: [outcome]
-      properties: {outcome: {type: string, enum: [APPROVED, REVISION_REQUESTED]}, feedback: {type: string, maxLength: 10000}}
+      oneOf:
+        - type: object
+          required: [reportVersionId, outcome]
+          properties: {reportVersionId: {$ref: '#/components/schemas/Id'}, outcome: {type: string, enum: [APPROVED]}, feedback: {type: string, maxLength: 10000}}
+        - type: object
+          required: [reportVersionId, outcome, feedback]
+          properties: {reportVersionId: {$ref: '#/components/schemas/Id'}, outcome: {type: string, enum: [REVISION_REQUESTED]}, feedback: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}}
     ReportReview:
       allOf: [{$ref: '#/components/schemas/ReportReviewInput'}, {type: object, required: [id, reviewedAt, reviewerName], properties: {id: {$ref: '#/components/schemas/Id'}, reviewedAt: {$ref: '#/components/schemas/Timestamp'}, reviewerName: {type: string}}}]
     WeeklyReport:
-      allOf:
-        - {$ref: '#/components/schemas/ReportDraftInput'}
-        - type: object
-          required: [id, placementId, state, versions, reviews]
-          properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, state: {$ref: '#/components/schemas/ReportState'}, currentVersionNo: {type: integer, minimum: 0}, versions: {type: array, items: {$ref: '#/components/schemas/ReportVersion'}}, reviews: {type: array, items: {$ref: '#/components/schemas/ReportReview'}}}
+      type: object
+      additionalProperties: false
+      description: Owning Student alone receives draft. Other participants see only submitted versions/reviews, never draft fields or attachments, including during revision. Reports without a submitted version are omitted from their lists and return 404 on detail, including for Admin. draft is omitted in SUBMITTED/APPROVED. reportVersionId joins each review to its immutable version.
+      required: [id, placementId, reportingPeriodId, weekStart, weekEnd, dueAt, state, currentVersionNo, versions, reviews]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        placementId: {$ref: '#/components/schemas/Id'}
+        reportingPeriodId: {$ref: '#/components/schemas/Id'}
+        weekStart: {$ref: '#/components/schemas/Date'}
+        weekEnd: {$ref: '#/components/schemas/Date'}
+        dueAt: {$ref: '#/components/schemas/Timestamp'}
+        state: {$ref: '#/components/schemas/ReportState'}
+        currentVersionNo: {type: integer, minimum: 0}
+        draft: {$ref: '#/components/schemas/ReportDraftInput'}
+        versions: {type: array, items: {$ref: '#/components/schemas/ReportVersion'}}
+        reviews: {type: array, items: {$ref: '#/components/schemas/ReportReview'}}
     SelfAssessmentInput:
       oneOf:
         - type: object
@@ -719,9 +894,9 @@ components:
         deadlines: {type: array, items: {$ref: '#/components/schemas/Deadline'}}
         recentActivity: {type: array, items: {$ref: '#/components/schemas/Activity'}}
         readOnly: {type: boolean, enum: [true]}
-    Deadline: {type: object, required: [kind, dueDate, target], properties: {kind: {type: string, enum: [APPLICATION, REPORT]}, dueDate: {$ref: '#/components/schemas/Date'}, target: {$ref: '#/components/schemas/Target'}}}
+    Deadline: {type: object, required: [kind, dueDate, dueAt, timezone, target], properties: {kind: {type: string, enum: [APPLICATION, REPORT]}, dueAt: {$ref: '#/components/schemas/Timestamp'}, timezone: {type: string}, reportingPeriodId: {$ref: '#/components/schemas/Id'}, dueDate: {$ref: '#/components/schemas/Date'}, target: {$ref: '#/components/schemas/Target'}}}
     Activity: {type: object, required: [type, occurredAt, target], properties: {type: {type: string}, occurredAt: {$ref: '#/components/schemas/Timestamp'}, target: {$ref: '#/components/schemas/Target'}}}
-    Target: {type: object, properties: {type: {type: string, enum: [POSTING, APPLICATION, PLACEMENT, REPORT]}, id: {$ref: '#/components/schemas/Id'}, label: {type: string}}}
+    Target: {type: object, properties: {reportingPeriodId: {$ref: '#/components/schemas/Id'}, type: {type: string, enum: [POSTING, APPLICATION, PLACEMENT, REPORT]}, id: {$ref: '#/components/schemas/Id'}, label: {type: string}}}
     Notification:
       type: object
       required: [id, type, title, createdAt, read]
@@ -736,12 +911,20 @@ components:
           required: [kind, postingId]
           properties: {kind: {type: string, enum: [MATCH_EXPLANATION]}, postingId: {$ref: '#/components/schemas/Id'}}
         - type: object
-          required: [kind, reportId]
-          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}, reportId: {$ref: '#/components/schemas/Id'}}
+          required: [kind, reportVersionId]
+          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}, reportVersionId: {$ref: '#/components/schemas/Id'}}
     AiJob:
       type: object
-      required: [id, kind, status, advisory, createdAt]
-      properties: {id: {$ref: '#/components/schemas/Id'}, kind: {type: string, enum: [MATCH_EXPLANATION, REPORT_SUMMARY]}, status: {type: string, enum: [PENDING, PROCESSING, SUCCEEDED, FAILED]}, advisory: {type: boolean, enum: [true]}, generatedContent: {type: string, description: Present only when succeeded; not a source record or decision.}, errorCode: {type: string, description: Safe, non-sensitive failure reason.}, createdAt: {$ref: '#/components/schemas/Timestamp'}, completedAt: {$ref: '#/components/schemas/Timestamp'}}
+      description: Match jobs require postingId, calculationVersion and sourceChanged; report jobs require reportVersionId. sourceChanged is recalculated by the API on reads by comparing current authorized match input with the retained snapshot; the worker still uses the original snapshot.
+      required: [id, kind, status, advisory, createdAt, inputFingerprint, promptVersion]
+      oneOf:
+        - type: object
+          required: [postingId, calculationVersion, sourceChanged]
+          properties: {kind: {type: string, enum: [MATCH_EXPLANATION]}}
+        - type: object
+          required: [reportVersionId]
+          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}}
+      properties: {id: {$ref: '#/components/schemas/Id'}, inputFingerprint: {type: string}, promptVersion: {type: string}, postingId: {$ref: '#/components/schemas/Id'}, reportVersionId: {$ref: '#/components/schemas/Id'}, calculationVersion: {type: string}, sourceChanged: {type: boolean}, kind: {type: string, enum: [MATCH_EXPLANATION, REPORT_SUMMARY]}, status: {type: string, enum: [PENDING, PROCESSING, SUCCEEDED, FAILED]}, advisory: {type: boolean, enum: [true]}, generatedContent: {type: string, description: Present only when succeeded; not a source record or decision.}, errorCode: {type: string, description: 'Safe, non-sensitive failure reason.'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, completedAt: {$ref: '#/components/schemas/Timestamp'}}
     Problem:
       type: object
       required: [type, title, status]

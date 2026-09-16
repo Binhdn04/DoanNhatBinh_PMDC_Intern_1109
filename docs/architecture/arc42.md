@@ -39,7 +39,7 @@ InternHub is a three-tier modular monolith.
 - **Application tier:** a NestJS API provides REST endpoints, authentication/authorization, validations, use cases, transactions, and module boundaries. A separate worker performs only durable, optional AI jobs.
 - **Data tier:** PostgreSQL is the authoritative store for business records, histories, notifications, generated-result status, and AI jobs. Private object storage contains document bytes and is accessed only through API-authorized operations.
 
-The API completes core reads and writes synchronously. It creates in-app notification records in the transaction that changes the underlying record. It queues AI only after authorization; core score calculation, application submission, report submission, and all human workflow decisions complete without waiting for a provider.
+The API completes core reads and writes synchronously. It creates event notifications in the transaction that changes the source record; its internal Notifications scheduler inserts deduplicated deadline reminders every 60 seconds using the same reporting calendar. It queues AI only after authorization; core score calculation, application submission, report submission, and all human workflow decisions complete without waiting for a provider.
 
 ## 5. Building block view
 
@@ -72,13 +72,13 @@ For application transitions, the transaction updates the current status, appends
 ### Optional AI path
 
 1. An authorized user requests a Match Score explanation or submitted-report summary.
-2. The API confirms the underlying score breakdown/report access and persists a durable pending AI job.
-3. The worker claims the job, submits minimized allowed content to the provider, and records succeeded, failed, or retryable status.
+2. The API confirms the underlying score breakdown/report access and persists a durable pending AI job with an immutable minimized input snapshot and explicit source/version identity.
+3. The worker claims the snapshotted job with a fenced 120-second lease, invokes the provider with a 60-second timeout, and records succeeded, failed, or retryable status. Three attempts are allowed; expired processing claims are recovered without reloading mutable source data.
 4. The SPA shows source information at all times and may refresh the advisory result. On failure or delay it shows a non-blocking unavailable state.
 
 ## 7. Deployment view
 
-The initial deployment remains intentionally small: a reverse proxy serves the SPA and routes `/api` to the API; API, worker, PostgreSQL, and object storage run on a private network. Only the proxy is publicly reachable. Database, storage, JWT, and AI-provider credentials are deployment secrets rather than repository content.
+The initial deployment remains intentionally small: a reverse proxy serves the SPA and routes `/api` to the API; API, worker, PostgreSQL, and object storage run on a private network. Only the proxy is publicly reachable. File content PUT/GET routes also pass through that proxy to the API, which streams private storage bytes. Configure a request body limit allowing 10 MiB; redact transfer tokens and disable caching for content. No browser-facing storage endpoint or storage CORS policy is required. Database, storage, JWT, and AI-provider credentials are deployment secrets rather than repository content.
 
 This baseline supports local Docker Compose use but does not claim high availability. Backups, secret management, managed services, and orchestration are operational extensions to make when scale or production policy requires them.
 
@@ -125,7 +125,7 @@ This baseline supports local Docker Compose use but does not claim high availabi
 
 - The prototype has mixed-role navigation, local mock state, and legacy interview screens; it must be replaced incrementally with role-aware, API-backed flows when implementation begins.
 - The current DBML lacks `company_staff` and uses `company_admins`; it needs a company-membership model. It also contains legacy AI-interview and combined-score concepts that conflict with the current requirements.
-- Durable AI jobs need idempotent claiming, retry limits, failure visibility, and safe handling of worker interruptions.
+- The specified durable AI input snapshots, fenced leases, three-attempt retry limit, and worker interruption recovery still require implementation and fault-injection verification.
 - AI requests introduce privacy, provider availability, cost, and generated-content clarity risks. Provider output must remain visibly advisory and separate from records/decisions.
 - A modular monolith has a practical scaling ceiling. Module boundaries and REST/contracts permit later extraction only when operations demonstrate a need.
 - Docker Compose is a development baseline, not a complete production-resilience strategy.
@@ -139,3 +139,13 @@ This baseline supports local Docker Compose use but does not claim high availabi
 | Match Score | Deterministic 0-100 skill-alignment value; advisory only. |
 | In-app notification | Recipient-owned persisted event with read/unread state; not an external message. |
 | AI job | Durable optional request for generated explanation or summary, processed by the worker. |
+
+## 13. Refined runtime protocols
+
+The normative [behavior rules](../design/behavior-rules.md) complete the runtime decisions identified in the audit: session-versioned active-role switching; supervisor selection and Admin-only reassignment; exact acceptance-command replay; canonical weeks/timezones and scheduler deduplication; owner-only report drafts with version-conditional reviews; API-mediated five-minute file authorizations; weighted skill-v1 matching; and immutable AI inputs with lease recovery.
+
+Identity validates JWT `sid`, activeRole, session version and expiry against auth_sessions and current user_roles on every request. Role switching locks the session, increments its version and returns a fresh token; the client clears prior role data. Relationship policies always query current memberships/assignments, including on transfers and AI polling.
+
+The Notifications scheduler is an API lifecycle service, not an AI-worker responsibility. Every replica can scan each minute; source locks and a unique dedupe key make concurrent inserts safe. Catch-up covers still-relevant windows and overdue reports. Report periods exist before drafts and are the common source for UI, monitoring, and reminders. Health checks surface scheduler scan age above five minutes. Event and reminder creation use separate triggers but the same recipient-scoped inbox.
+
+Quality verification must include the complete [acceptance matrix](../design/traceability.md), particularly role/assignment revocation, private revision attachments, stale reviews, concurrent acceptance/replay, missed scheduler ticks and expired AI claims. This is a corrected target design; runtime sign-off requires implementation evidence.

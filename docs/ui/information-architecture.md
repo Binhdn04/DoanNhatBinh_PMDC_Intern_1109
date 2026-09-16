@@ -4,7 +4,7 @@
 
 This information architecture describes InternHub after authentication. It is derived from the functional requirements in [`docs/requirements/requirements.md`](../requirements/requirements.md); a user sees only records and actions allowed by both their active role and their relationship to the record.
 
-Sign-in and account creation are outside scope. A user with more than one role selects an **active role** from the account menu; changing it refreshes navigation and returns the user to that role's landing page.
+Sign-in and account creation are outside scope. A user with more than one role selects an **active role** from the account menu; the shell first calls `PUT /api/v1/me/active-role`. On success it replaces the token, clears role-scoped data, cancels prior requests, refreshes navigation, and returns to that role's landing page. Failure retains the old shell or triggers session recovery; changing navigation alone never changes authorization.
 
 The current React prototype provides useful patterns to retain: calm neutral surfaces, blue primary actions, cards, filter controls, status chips, detail sidebars, timelines, and readable two-column desktop layouts. Its single mixed-role sidebar, simulated AI interviews, interview scores, and any AI-driven decision presentation are not part of this architecture.
 
@@ -134,3 +134,7 @@ Status and history are context, not editable labels. A status transition opens a
 | RQ-14 Monitoring | Admin Monitoring dashboard with read-only drill-through. |
 | RQ-15 Notifications | Header notification panel, Notification Inbox, authorized deep links. |
 | RQ-16 Optional AI assistance | On-demand Match Score explanation and Report Summary panels, including unavailable/error fallback. |
+
+## Assignment and reporting navigation
+
+Application Review includes the eligible-supervisor/date acceptance form. Admin Placement Overview includes an Assignment History/Change action; it is outside read-only Monitoring and absent for Company Staff/Supervisors. Report creation starts from the placement reporting calendar, including weeks without reports. Deadline deep links carry reportingPeriodId to select the correct week. These flows use the contracts and privacy rules in [behavior rules](../design/behavior-rules.md).
