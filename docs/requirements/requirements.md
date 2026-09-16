@@ -2,7 +2,7 @@
 
 **Status:** Derived implementation-agnostic requirements  
 **Source of truth:** [Functional specification](./spec.md)  
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-16
 
 ## How to use this document
 
@@ -12,7 +12,7 @@ Each requirement is a small, testable product slice written to support the INVES
 
 - **Eligible posting** means an Open posting whose deadline has not passed.
 - A user may access a record only when both their role and their relationship to that record permit it. Company Staff are related only to their own company; Supervisors are related only to explicitly assigned placements; Students are related only to their own records. Admins have the access needed to administer all records.
-- Dates use the product's current date. A deadline ending on the current date remains valid through that date unless the product presents a more precise deadline time.
+- Dates use the product's current date. A deadline ending on the current date remains valid through that date. Dates use the recorded posting/placement timezone; reporting weeks run Monday through Sunday and are due at the following Monday midnight. Defaults and exact boundaries are defined in the linked behavior rules.
 - The requirements describe in-app behavior. They do not prescribe APIs, persistence, database design, hosting, or integrations.
 
 ## Requirements
@@ -27,7 +27,7 @@ Each requirement is a small, testable product slice written to support the INVES
   - **Given** a Student and another student's application, **when** the Student tries to view or change it, **then** access is denied.
   - **Given** Company Staff and a posting owned by their company, **when** they manage it, **then** the action is allowed within their posting permissions.
   - **Given** a Supervisor not assigned to a placement, **when** they request its reports or tasks, **then** access is denied.
-- **Edge cases:** Removing a supervisor assignment removes that Supervisor's future access; it does not remove the placement's existing history. A user with multiple roles is authorized only through a valid role-relationship combination.
+- **Edge cases:** Removing a supervisor assignment removes that Supervisor's future access; it does not remove the placement's existing history. A user with multiple roles is authorized only through a valid role-relationship combination. Selecting an active role must be validated by the server before navigation/data refresh. Admin may replace or revoke the supervisor on an Active placement, with reason and retained assignment history; a temporarily unassigned placement remains under Admin supervision.
 - **Dependencies:** Authenticated identity and the ownership/assignment relationships established by RQ-03, RQ-08, and RQ-09.
 
 ### RQ-02 — Maintain student profile and preferences
@@ -48,7 +48,7 @@ Each requirement is a small, testable product slice written to support the INVES
 - **Actor:** Company Staff, Admin
 - **User story:** As Company Staff, I want to maintain my company and its internship postings, so that Students can apply to accurate opportunities.
 - **Preconditions:** The actor is authorized for the company; a company exists before its posting is created.
-- **Business rules:** Company Staff may manage only their company's public profile and postings; Admins may do so for any company. A posting moves among Draft, Open, Closed, and Archived. Publishing requires company, title, description, location, work arrangement, duration, deadline, number of openings, required skills, and optional skills. Only eligible postings accept new applications.
+- **Business rules:** Company Staff may manage only their company's public profile and postings; Admins may do so for any company. A posting moves among Draft, Open, Closed, and Archived. Publishing requires company, title, description, location, work arrangement, duration, deadline, number of openings, explicitly declared required and optional skill groups (either or both may be empty). Only eligible postings accept new applications.
 - **Acceptance criteria:**
   - **Given** a Draft posting with all required information, **when** authorized staff publish it, **then** it becomes Open and is discoverable.
   - **Given** a posting missing a required publishing field, **when** staff attempt to publish it, **then** it remains unpublished and identifies the missing information.
@@ -74,7 +74,7 @@ Each requirement is a small, testable product slice written to support the INVES
 - **Actor:** Student
 - **User story:** As a Student, I want to see an understandable Match Score for an eligible posting, so that I can assess skill alignment without being screened out.
 - **Preconditions:** The Student is authenticated, has a profile, and is viewing an eligible posting.
-- **Business rules:** The score is an integer from 0 through 100 calculated deterministically from the Student's recorded skills and the posting's required and optional skills. The product identifies matched and missing skills. Identical inputs produce the same score and breakdown. The score is advisory and cannot determine visibility, application eligibility, or a hiring decision.
+- **Business rules:** The score is an integer from 0 through 100 calculated deterministically from the Student's recorded skills and the posting's required and optional skills. The product identifies matched and missing skills. Identical inputs produce the same score and breakdown. Version skill-v1 gives each required skill weight 2 and each optional skill weight 1, uses skill presence without proficiency weighting, and rounds the matched-weight percentage to the nearest integer with halves upward. No posting skills yields 0 with an explicit no-skills explanation. The score is advisory and cannot determine visibility, application eligibility, or a hiring decision.
 - **Acceptance criteria:**
   - **Given** unchanged Student skills and posting skills, **when** the score is requested repeatedly, **then** the same score and breakdown are displayed.
   - **Given** a Student lacks a required posting skill, **when** the score is displayed, **then** that skill is identified as missing and the Student can still apply if otherwise eligible.
@@ -112,13 +112,13 @@ Each requirement is a small, testable product slice written to support the INVES
 - **Actor:** Company Staff, Admin; Student for withdrawal
 - **User story:** As authorized Company Staff, I want to move an application's status through the review process, so that application outcomes are auditable and accepted Students receive a placement.
 - **Preconditions:** An application exists; Company Staff are authorized for the posting's company, or the actor is an Admin.
-- **Business rules:** Staff/Admin progression is `Submitted` to `Under Review` to `Interview` to `Accepted`; rejection is allowed from `Submitted`, `Under Review`, or `Interview`. A Student may withdraw only their own non-terminal application. `Accepted`, `Rejected`, and `Withdrawn` are terminal. Each status change retains old and new status, time, acting user, and supplied note; history cannot be edited or deleted. Accepting creates exactly one placement; no other status can create one.
+- **Business rules:** Staff/Admin progression is `Submitted` to `Under Review` to `Interview` to `Accepted`; rejection is allowed from `Submitted`, `Under Review`, or `Interview`. A Student may withdraw only their own non-terminal application. `Accepted`, `Rejected`, and `Withdrawn` are terminal. Each status change retains old and new status, time, acting user, and supplied note; history cannot be edited or deleted. Accepting requires an eligible Supervisor and ordered start/end dates, creates exactly one placement and its reporting calendar; no other status can create one. Responsible Company Staff/Admin chooses the initial supervisor from the eligible directory.
 - **Acceptance criteria:**
   - **Given** an application in `Submitted`, **when** authorized staff set it to `Under Review`, **then** the status change and its audit details are visible in history.
   - **Given** an application in an allowed non-terminal state, **when** authorized staff accept it, **then** it becomes `Accepted` and exactly one placement is created.
   - **Given** an accepted, rejected, or withdrawn application, **when** any actor attempts another transition, **then** the transition is refused.
   - **Given** a Student's non-terminal application, **when** the Student withdraws it, **then** it becomes `Withdrawn` and no placement is created.
-- **Edge cases:** A retry of acceptance must not create a duplicate placement. Staff from a different company cannot change the application. A rejection does not allow a replacement application to the same posting.
+- **Edge cases:** An identical acceptance retry returns the existing placement without another transition, history entry, or notification. A retry with different supervisor, dates, or note is rejected; comparison uses the original acceptance even after reassignment. Staff from a different company cannot change the application. A rejection does not allow a replacement application to the same posting.
 - **Dependencies:** RQ-01, RQ-03, RQ-07, and RQ-09.
 
 ### RQ-09 — View and manage the placement lifecycle
@@ -158,7 +158,7 @@ Each requirement is a small, testable product slice written to support the INVES
   - **Given** a submitted report, **when** an authorized reviewer requests revision with feedback, **then** the Student can revise and resubmit it for the same week.
   - **Given** a revised report is resubmitted, **when** report history is viewed, **then** the prior submission and review feedback remain available alongside the new version.
   - **Given** a reviewer attempts to request revision without feedback, **when** they submit the decision, **then** the decision is refused.
-- **Edge cases:** A Student cannot submit another independent report for the same placement and week. A draft remains private until submitted. A completed or terminated placement does not accept new drafts or submissions, but authorized users retain read access to history.
+- **Edge cases:** A Student cannot submit another independent report for the same placement and week. Draft text and attachments remain private to the Student on every revision; prior submitted versions remain readable to authorized participants. Reviews identify the exact submitted version and stale review decisions are rejected. A completed or terminated placement does not accept new drafts or submissions, but authorized users retain read access to history.
 - **Dependencies:** RQ-01, RQ-09, and RQ-15 for feedback/revision notifications.
 
 ### RQ-12 — Submit a student self-assessment
@@ -229,3 +229,7 @@ Each requirement is a small, testable product slice written to support the INVES
 ## Out of scope
 
 The following are deliberately excluded from these requirements: AI interviews or screening; automated hiring, evaluation, task, completion, or workflow-status decisions; semantic/embedding search; external notification delivery; and all implementation architecture or technology decisions.
+
+## Design refinements and acceptance traceability
+
+The product clarifications above and the [behavior rules](../design/behavior-rules.md) define supervisor selection/change, date/calendar policy, scoring and empty skill groups, saved-draft privacy, and exact retry behavior. These refinements are also recorded in the authoritative specification. [Acceptance traceability](../design/traceability.md) maps UI actions through API authorization, transitions, persistence, and verification scenarios; it does not claim those scenarios have already passed against an implementation.

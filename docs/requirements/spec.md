@@ -2,7 +2,7 @@
 
 **Status:** Functional source of truth  
 **Scope:** Current InternHub product scope  
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-16
 
 ## 1. Purpose and scope
 
@@ -31,7 +31,7 @@ The system must verify both a user's role and their relationship to the specific
 - A student skill may include a proficiency level. Students can add, change, or remove their own skills and preferences.
 - Students can store preferred industries, locations, work arrangements, and internship duration; preferences influence discovery relevance but do not prevent viewing otherwise eligible postings.
 - Company Staff can view and maintain their own company's public information and create, edit, publish, close, or archive that company's internship postings. Admins can do the same.
-- A posting must identify its company, title, description, location, work arrangement, duration, deadline, number of openings, and required and optional skills before it is published.
+- A posting must identify its company, title, description, location, work arrangement, duration, deadline, number of openings, and explicitly declared required and optional skill groups before it is published. Either or both skill groups may be empty.
 - Only open postings whose deadline has not passed are available for new applications. Closed, archived, draft, or expired postings are not available for new applications, but authorized users may still view the records relevant to them.
 - Students can save and remove open internship opportunities from a personal saved-opportunity list.
 
@@ -128,3 +128,15 @@ The following are intentionally outside the current functional scope:
 - Architectural choices such as API routes, databases, queues, storage providers, deployment, or internal processing mechanisms.
 
 The previous role label `company_admin` is superseded in product language by **Company Staff**: a company member authorized to manage that company's records. The UI's combined evaluation controls are superseded by the separate role-owned evaluation requirements in this document.
+
+## 7. Audit-driven product clarifications
+
+- Users select only a role they currently hold; the server establishes that selection before role-specific navigation and data change.
+- Responsible Company Staff/Admin chooses an eligible Supervisor and start/end dates when accepting an application. Eligible Supervisors hold the Supervisor role and profile; there is no company/program restriction in v1. Admin alone may subsequently replace or revoke an Active placement's assignment with retained actor/time/reason history. A temporarily unassigned placement is handled by Admin. Revocation removes future Supervisor access immediately.
+- Identical acceptance retries return the existing result without a new transition. Different acceptance details conflict with the retained original command, even after reassignment.
+- Skill matching uses presence only: required skills have weight 2, optional skills weight 1; the matched-weight percentage is rounded to an integer with halves upward. Empty posting skills yield 0 and a no-skills explanation. Proficiency and preferences do not alter the score. Relevance counts matching preference dimensions and uses score, recency and ID as stable tie-breakers; it never excludes otherwise eligible opportunities.
+- Dates use a recorded IANA timezone, resolved from the term override, its program, or Asia/Ho_Chi_Minh fallback. Reporting periods are Monday–Sunday weeks overlapping placement dates, including partial first/last weeks; each is due at the following Monday midnight. Reports cannot be started before their week starts. Late submissions are permitted on Active placements. Initial submission time determines lateness. Ending a placement stops report writes and reminders, retaining history.
+- Application deadline reminders go to Students who saved a still-eligible posting and have not applied, during its last 24 hours. Report reminders go to the placement Student during the last 24 hours before its deadline and once after it becomes overdue, only while Active and without any submitted version. Revision requests do not create a new deadline. Notifications remain in-app and are deduplicated.
+- Draft text and draft attachments remain private to the Student throughout revisions, including from Admin. Submitted versions and version-linked reviews remain available to authorized participants. Review decisions apply only to the exact version viewed; stale decisions are rejected.
+
+The [behavior rules](../design/behavior-rules.md) define the corresponding calculation, calendar boundaries, and technical protocols; [traceability](../design/traceability.md) records observable acceptance scenarios.
