@@ -1,82 +1,14 @@
-import type { ReactNode } from 'react';
-// ─── Shared UI Components ─────────────────────────────────────────────────────
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 
-export function SkillTag({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-      {label}
-    </span>
-  );
-}
-
-export function Button({
-  children, variant = 'primary', size = 'md', onClick, disabled, fullWidth, type = 'button',
-}: {
-  children: ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
-  size?: 'sm' | 'md' | 'lg';
-  onClick?: () => void;
-  disabled?: boolean;
-  fullWidth?: boolean;
-  type?: 'button' | 'submit';
-}) {
-  const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
-  const sizes = { sm: 'px-3 py-1.5 text-sm gap-1.5', md: 'px-4 py-2 text-sm gap-2', lg: 'px-6 py-3 text-base gap-2' };
-  const variants = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-sm',
-    secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 shadow-sm',
-    ghost: 'text-slate-600 hover:bg-slate-100 focus:ring-slate-300',
-    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-    success: 'bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500 shadow-sm',
-  };
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${sizes[size]} ${variants[variant]} ${fullWidth ? 'w-full' : ''}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function FormField({
-  label, required, children, hint,
-}: { label: string; required?: boolean; children: ReactNode; hint?: string }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-slate-700">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      {children}
-      {hint && <p className="text-xs text-slate-500">{hint}</p>}
-    </div>
-  );
-}
-
-export function Input({
-  placeholder, value, onChange, type = 'text',
-}: { placeholder?: string; value?: string; onChange?: (v: string) => void; type?: string }) {
-  return (
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={e => onChange?.(e.target.value)}
-      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-    />
-  );
-}
-
-export function Select({ options, value, onChange }: { options: string[]; value?: string; onChange?: (v: string) => void }) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange?.(e.target.value)}
-      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none"
-    >
-      {options.map(o => <option key={o}>{o}</option>)}
-    </select>
-  );
-}
+export function Button({ children, variant = 'primary', onClick, type = 'button', disabled, className = '' }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; onClick?: () => void; type?: 'button' | 'submit'; disabled?: boolean; className?: string }) { return <button type={type} onClick={onClick} disabled={disabled} className={`button ${variant} ${className}`}>{children}</button>; }
+export function Status({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'positive' | 'attention' | 'urgent' | 'blue' | 'green' | 'amber' | 'red' | 'violet' }) { return <span className={`status ${tone}`}><span aria-hidden="true">●</span>{children}</span>; }
+export function Card({ children, className = '', style }: { children: ReactNode; className?: string; style?: CSSProperties }) { return <section className={`card ${className}`} style={style}>{children}</section>; }
+export function PageHeader({ title, description, action, crumbs }: { title: string; description?: string; action?: ReactNode; crumbs?: string }) { return <header className="page-header">{crumbs && <p className="crumbs">{crumbs}</p>}<div className="header-row"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div></header>; }
+export function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: ReactNode }) { return <label className="field"><span>{label}{required && <b aria-label="required"> *</b>}</span>{children}{hint && <small>{hint}</small>}</label>; }
+export const TextInput = (p: React.InputHTMLAttributes<HTMLInputElement>) => <input className="input" {...p} />;
+export const SelectInput = ({ children, ...p }: React.SelectHTMLAttributes<HTMLSelectElement>) => <select className="input" {...p}>{children}</select>;
+export const TextArea = (p: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea className="input textarea" {...p} />;
+export function EmptyState({ title, text, action }: { title: string; text: string; action?: ReactNode }) { return <Card className="empty"><span aria-hidden="true">○</span><h2>{title}</h2><p>{text}</p>{action}</Card>; }
+export function Timeline({ items }: { items: Array<{ title: string; meta: string; note?: string }> }) { return <ol className="timeline">{items.map((item, i) => <li key={`${item.title}-${i}`}><span aria-hidden="true"/><div><strong>{item.title}</strong><small>{item.meta}</small>{item.note && <p>{item.note}</p>}</div></li>)}</ol>; }
+export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) { const ref = useRef<HTMLDivElement>(null); useEffect(() => { ref.current?.focus(); }, []); return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabIndex={-1} ref={ref} onMouseDown={e => e.stopPropagation()}><div className="modal-title"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" onClick={onClose}>×</button></div>{children}</div></div>; }
+export function Advisory({ title = 'Generated assistance', children, onRefresh }: { title?: string; children: ReactNode; onRefresh?: () => void }) { return <aside className="advisory"><div><span aria-hidden="true">✦</span><strong>{title}</strong>{onRefresh && <button onClick={onRefresh}>Refresh</button>}</div>{children}<small>This is advisory only. It does not change source data or decisions.</small></aside>; }

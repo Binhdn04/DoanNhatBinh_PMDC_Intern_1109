@@ -6,16 +6,16 @@ This information architecture describes InternHub after authentication. It is de
 
 Sign-in and account creation are outside scope. A user with more than one role selects an **active role** from the account menu; the shell first calls `PUT /api/v1/me/active-role`. On success it replaces the token, clears role-scoped data, cancels prior requests, refreshes navigation, and returns to that role's landing page. Failure retains the old shell or triggers session recovery; changing navigation alone never changes authorization.
 
-The current React prototype provides useful patterns to retain: calm neutral surfaces, blue primary actions, cards, filter controls, status chips, detail sidebars, timelines, and readable two-column desktop layouts. Its single mixed-role sidebar, simulated AI interviews, interview scores, and any AI-driven decision presentation are not part of this architecture.
+The current React prototype provides useful patterns to retain: cards, filter controls, status badges, detail sidebars, timelines, and readable two-column desktop layouts. Apply the warm editorial visual direction: paper main surfaces, cream navigation, white raised content, moss primary actions, warm borders, and restrained elevation. Its single mixed-role sidebar, simulated AI interviews, interview scores, and any AI-driven decision presentation are not part of this architecture.
 
 ## Authenticated application shell
 
 All product screens use one shell.
 
 - **Header:** InternHub home link, page context/breadcrumbs where useful, notification bell with unread count, and account menu with active role and role switcher.
-- **Primary navigation:** role-aware persistent left sidebar on desktop; compact trigger and drawer on smaller viewports. It contains only areas useful to the active role.
-- **Content header:** page title, short context, filters or period selector when relevant, and the page's primary action. Record pages use a breadcrumb and record status.
-- **Content area:** responsive, scrollable page content. Index/list pages use filter-and-list or table layouts; record pages use a main column plus contextual side panel at desktop widths.
+- **Primary navigation:** role-aware, 232px persistent cream left sidebar with a subtle right border on desktop; compact trigger and drawer on smaller viewports. It contains only areas useful to the active role. Active items use a white bordered surface with moss text/icon; inactive items use muted ink.
+- **Content header:** a Fraunces page title, short context, filters or period selector when relevant, and the page's moss primary action. Record pages use a breadcrumb and record status.
+- **Content area:** responsive, scrollable paper content with a ~1180px maximum, 40–48px desktop horizontal padding, and 32–40px desktop top padding. Raised cards/panels are white with warm borders. Index/list pages use filter-and-list or table layouts; record pages use a main column plus contextual side panel at desktop widths.
 - **Notifications:** the bell opens a short recent-notifications panel; a link opens the full notification inbox. Notifications deep-link to an authorized record and mark themselves read on open or explicit action.
 
 The shell is not a permission boundary by itself. Direct links and refreshed pages must also check access. If access is absent, show the standard access-denied page without revealing protected data.

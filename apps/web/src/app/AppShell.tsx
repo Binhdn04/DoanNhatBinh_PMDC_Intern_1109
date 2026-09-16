@@ -1,47 +1,30 @@
 import { useState } from 'react';
-import { AdminDashboardScreen } from '@/features/admin/screens';
-import { ApplicationsScreen, ApplyScreen, InterviewResultScreen, InterviewScreen } from '@/features/applications/screens';
-import { DiscoverScreen, DetailScreen } from '@/features/discovery/screens';
-import { EvaluationScreen } from '@/features/evaluation/screens';
-import { ProfileOrgScreen } from '@/features/profile/screens';
-import { InternshipScreen, SupervisorReviewScreen, WeeklyReportScreen } from '@/features/progress/screens';
 import { Sidebar } from './sidebar';
-import type { Screen } from './types';
+import { landingByRole, type Role, type Route, type View } from './types';
+import { Card } from '@/shared/ui';
+import { Workspace } from '@/features/workspace/Workspace';
+
+const notifications = [
+  { title: 'Your Week 2 report was submitted', time: '15 minutes ago', view: 'report-detail' as View, unread: true },
+  { title: 'Application status changed to Under Review', time: '2 hours ago', view: 'application-detail' as View, unread: true },
+  { title: 'A supervisor added a new task', time: 'Yesterday', view: 'tasks' as View, unread: false },
+];
 
 export default function AppShell() {
-  const [screen, setScreen] = useState<Screen>('discover');
-  const [selectedInternshipId, setSelectedInternshipId] = useState<string>('1');
-
-  const handleViewDetail = (id: string) => { setSelectedInternshipId(id); setScreen('detail'); };
-  const handleApply = () => setScreen('apply');
-
-  return (
-    <div className="flex h-full overflow-hidden bg-[#f8f9fb]">
-      <Sidebar activeScreen={screen} onNavigate={setScreen} />
-      <main className="flex-1 overflow-hidden flex flex-col">
-        {screen === 'discover' && <DiscoverScreen onViewDetail={handleViewDetail} />}
-        {screen === 'detail' && <DetailScreen internshipId={selectedInternshipId} onApply={handleApply} onBack={() => setScreen('discover')} />}
-        {screen === 'apply' && <ApplyScreen internshipId={selectedInternshipId} onBack={() => setScreen('detail')} />}
-        {screen === 'interview' && <InterviewScreen onComplete={() => setScreen('interview-result')} onBack={() => setScreen('applications')} />}
-        {screen === 'interview-result' && <InterviewResultScreen onRetake={() => setScreen('interview')} onApplications={() => setScreen('applications')} />}
-        {screen === 'applications' && <ApplicationsScreen onGoInterview={() => setScreen('interview')} />}
-        {screen === 'internship' && <InternshipScreen onSubmitReport={() => setScreen('weekly-report')} />}
-        {screen === 'weekly-report' && <WeeklyReportScreen onBack={() => setScreen('internship')} onSubmitted={() => setScreen('supervisor-review')} />}
-        {screen === 'supervisor-review' && <SupervisorReviewScreen onBack={() => setScreen('internship')} />}
-        {screen === 'evaluation' && <EvaluationScreen />}
-        {screen === 'profile-org' && <ProfileOrgScreen />}
-        {screen === 'admin-dashboard' && <AdminDashboardScreen />}
-        {screen === 'profile' && <ProfilePlaceholder />}
-        {screen === 'reports' && <ReportsPlaceholder onNavigateToInternship={() => setScreen('internship')} />}
-      </main>
+  const [role, setRole] = useState<Role>('Student');
+  const [route, setRoute] = useState<Route>({ view: 'discover' });
+  const [drawer, setDrawer] = useState(false); const [panel, setPanel] = useState(false); const [read, setRead] = useState<string[]>([]);
+  const navigate = (view: View, recordId?: string, tab?: string) => { setRoute({ view, recordId, tab }); setPanel(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const changeRole = (next: Role) => { setRole(next); setRoute({ view: landingByRole[next] }); setDrawer(false); setPanel(false); };
+  const unread = notifications.filter(n => n.unread && !read.includes(n.title)).length;
+  return <div className={`app ${drawer ? 'drawer-open' : ''}`}>
+    <a className="skip-link" href="#main-content">Skip to main content</a>
+    <Sidebar role={role} route={route} navigate={navigate} close={() => setDrawer(false)}/>
+    <div className="shell-main">
+      <header className="topbar"><button className="mobile-menu" aria-label="Open navigation menu" aria-expanded={drawer} onClick={() => setDrawer(v => !v)}>☰</button><button aria-label="Open notifications" aria-expanded={panel} onClick={() => setPanel(v => !v)}>◔ <sup>{unread || ''}</sup></button><select className="role-menu" aria-label="Active role" value={role} onChange={e => changeRole(e.target.value as Role)}>{(['Student', 'Company Staff', 'Supervisor', 'Admin'] as Role[]).map(r => <option key={r}>{r}</option>)}</select><button aria-label="Account menu">BD⌄</button>
+        {panel && <Card className="notification-panel"><header><strong>Notifications</strong><button onClick={() => setRead(notifications.map(n => n.title))}>Mark all read</button></header>{notifications.map(n => <button className={`item ${n.unread && !read.includes(n.title) ? 'unread' : ''}`} key={n.title} onClick={() => { setRead(x => [...x, n.title]); navigate(n.view); }}><strong>{n.title}</strong><small>{n.time}</small></button>)}<button className="item" onClick={() => navigate('notifications')}>Open notification inbox</button></Card>}
+      </header>
+      <main id="main-content" className="content"><Workspace role={role} route={route} navigate={navigate}/></main>
     </div>
-  );
-}
-
-function ProfilePlaceholder() {
-  return <div className="flex flex-col items-center justify-center h-full text-center px-12"><div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-7 8-7s8 2.582 8 7"/></svg></div><h2 className="text-xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>Profile</h2><p className="text-sm text-slate-500">Manage your skills, experience, and preferences.</p></div>;
-}
-
-function ReportsPlaceholder({ onNavigateToInternship }: { onNavigateToInternship: () => void }) {
-  return <div className="flex flex-col items-center justify-center h-full text-center px-12"><div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 14V8l9-7 9 7v6M7 24v-7h10v7"/></svg></div><h2 className="text-xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>Weekly Reports</h2><p className="text-sm text-slate-500">Navigate to My Internship to submit your weekly report.</p><button onClick={onNavigateToInternship} className="mt-4 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">Go to My Internship →</button></div>;
+  </div>;
 }

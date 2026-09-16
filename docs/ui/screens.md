@@ -4,6 +4,8 @@
 
 Every data screen supports loading, recoverable load error, empty/no-result, and access-denied states as applicable. List screens preserve filters when a user returns from detail. Record screens show a lifecycle state in their header and use an immutable history/timeline wherever the requirements retain audit information.
 
+Apply the shared warm editorial system consistently: use a Fraunces page title and important entity titles, compact Inter controls and metadata, and a paper canvas with white, warm-bordered information cards. Keep filters in a compact aligned row above results; use tables for dense administrative comparison and cards for discoverable or narrow mobile lists. On desktop, records retain their main column plus contextual side panel; status labels use moss-soft for positive, marigold-soft for attention, and coral-soft for urgent/error states, always with text and a non-color cue.
+
 The following state vocabulary prevents repetitive ambiguity in the inventory:
 
 - **Permission:** unauthorized direct access renders Access Denied without record data; unrelated records never appear in lists or notifications.
