@@ -33,6 +33,28 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /auth/sign-in:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Create a local development session
+      operationId: signIn
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [email, password], properties: {email: {type: string, format: email}, password: {type: string, format: password}, activeRole: {$ref: '#/components/schemas/Role'}}}}}}
+      responses: {'201': {description: Bearer session}}
+  /auth/refresh:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Refresh a valid local session token
+      operationId: refreshSession
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token], properties: {token: {type: string}}}}}}
+      responses: {'201': {description: Replacement bearer session}}
+  /auth/sign-out:
+    post:
+      tags: [Identity]
+      summary: Revoke the current local session
+      operationId: signOut
+      responses: {'201': {description: Session revoked}}
   /me:
     get:
       tags: [Identity]

@@ -1,0 +1,1 @@
+{"name":"@internhub/contracts","private":true,"version":"0.1.0","scripts":{"generate":"openapi-typescript ../../docs/api/openapi.yaml -o src/generated/openapi.ts","typecheck":"tsc --noEmit"},"devDependencies":{"openapi-typescript":"^7.8.0","typescript":"^5.9.2"}}
