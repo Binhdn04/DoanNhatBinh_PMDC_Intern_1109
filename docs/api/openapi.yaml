@@ -33,6 +33,14 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /health:
+    get:
+      tags: [Identity]
+      security: []
+      summary: Read API and deadline-scheduler freshness
+      operationId: getHealth
+      responses:
+        '200': {description: API health with scheduler freshness}
   /auth/sign-in:
     post:
       tags: [Identity]
