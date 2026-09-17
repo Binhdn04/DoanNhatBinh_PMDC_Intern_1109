@@ -11,6 +11,9 @@
     "build:api": "pnpm --filter @internhub/api build",
     "typecheck:api": "pnpm --filter @internhub/api typecheck",
     "test:api": "pnpm --filter @internhub/api test",
+    "test:domain": "pnpm --filter @internhub/domain test",
+    "test": "pnpm test:domain && pnpm test:api && pnpm test:web",
+    "test:coverage": "pnpm --filter @internhub/domain test:coverage && pnpm --filter @internhub/api test:coverage && pnpm --filter @internhub/web test:coverage",
     "db:migrate": "pnpm --filter @internhub/api migration:run",
     "db:seed": "pnpm --filter @internhub/api seed",
     "contracts:generate": "pnpm --filter @internhub/contracts generate"

@@ -13,3 +13,4 @@ logs/
 .tmp-*
 .plugins/
 .opencode-skills/
+coverage/
