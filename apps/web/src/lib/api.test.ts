@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { api, configureApi } from './api'
+import { api, configureApi, endpoints, sha256, uploadDocument } from './api'
 
 describe('API client', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -18,5 +18,39 @@ describe('API client', () => {
     configureApi({ getToken: () => 'expired', onUnauthorized: unauthorized })
     await expect(api('/me')).rejects.toMatchObject({ status: 401, message: 'Expired' })
     expect(unauthorized).toHaveBeenCalledOnce()
+  })
+
+  it('sets JSON content type but preserves FormData requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await api('/json', { method: 'POST', body: JSON.stringify({ ok: true }) })
+    await api('/form', { method: 'POST', body: new FormData() })
+    expect(fetchMock.mock.calls[0][1].headers.get('Content-Type')).toBe('application/json')
+    expect(fetchMock.mock.calls[1][1].headers.has('Content-Type')).toBe(false)
+  })
+
+  it('uses endpoint method, payload, and encoded query values', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await endpoints.setActiveRole('ADMIN')
+    await endpoints.supervisors('app/id', 'A B')
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3000/api/v1/me/active-role')
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ role: 'ADMIN' }) })
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:3000/api/v1/supervisors?applicationId=app%2Fid&search=A%20B')
+  })
+
+  it('hashes and uploads a document before completing it', async () => {
+    const digest = new Uint8Array(32).fill(10).buffer
+    vi.stubGlobal('crypto', { subtle: { digest: vi.fn().mockResolvedValue(digest) } })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ document: { id: 'doc-1' }, uploadUrl: 'https://upload.test/doc-1' }), { headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'doc-1', state: 'AVAILABLE' }), { headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const file = new File(['hello'], 'cv.pdf', { type: 'application/pdf' })
+    await expect(sha256(file)).resolves.toBe('0a'.repeat(32))
+    await expect(uploadDocument(file)).resolves.toMatchObject({ id: 'doc-1' })
+    expect(fetchMock.mock.calls[1][0]).toBe('https://upload.test/doc-1')
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PUT', body: file })
   })
 })
