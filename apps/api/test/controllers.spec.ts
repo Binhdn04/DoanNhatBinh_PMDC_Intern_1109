@@ -1,5 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
-import { CoreController } from '../src/modules/controllers';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { AuthController, CoreController } from '../src/modules/controllers';
 
 const repo = () => ({ find: jest.fn(), findBy: jest.fn(), findOneBy: jest.fn(), save: jest.fn(), create: jest.fn(), upsert: jest.fn(), exist: jest.fn() });
 
@@ -37,5 +37,53 @@ describe('core controller unit behaviour', () => {
     await expect(controller.updateProfile(student, { university: 'InternHub' })).resolves.toMatchObject({ studentId: student.id, university: 'InternHub', userId: student.id });
     repos[2].findOneBy.mockResolvedValue(null); repos[2].save.mockImplementation(async (value: unknown) => value);
     await expect(controller.getPreferences(student)).resolves.toMatchObject({ studentId: student.id, industries: [] });
+  });
+
+  it('rotates the active role only when it changes and signs the refreshed token', async () => {
+    const { controller } = createController(); const session = { activeRole: 'STUDENT', version: 2 };
+    const qb = { setLock: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), getOneOrFail: jest.fn().mockResolvedValue(session) };
+    const manager = { getRepository: jest.fn(() => ({ createQueryBuilder: jest.fn(() => qb) })), save: jest.fn() };
+    (controller as any).db.transaction = jest.fn(async (fn: any) => fn(manager)); (controller as any).jwt.signAsync = jest.fn().mockResolvedValue('next');
+    await expect(controller.setRole({ ...student, roles: ['STUDENT', 'ADMIN'] }, { role: 'ADMIN' })).resolves.toEqual({ activeRole: 'ADMIN', accessToken: 'next' });
+    expect(manager.save).toHaveBeenCalledWith(expect.objectContaining({ version: 3 }));
+    await expect(controller.setRole(student, { role: 'ADMIN' })).rejects.toBeDefined();
+  });
+
+  it('validates duplicate skills and returns resolved skills in input order', async () => {
+    const { controller } = createController();
+    const skillRepo = { findOneBy: jest.fn().mockResolvedValue({ id: 's1', name: 'TypeScript' }) };
+    const profileRepo = { findOneBy: jest.fn().mockResolvedValue({ userId: student.id }) };
+    const links = { delete: jest.fn(), save: jest.fn() };
+    const manager = { getRepository: jest.fn((entity: any) => entity.name === 'Skill' ? skillRepo : entity.name === 'StudentProfile' ? profileRepo : links) };
+    (controller as any).db.transaction = jest.fn(async (fn: any) => fn(manager));
+    await expect(controller.setSkills(student, { skills: [{ id: 's1' }, { id: 's1' }] })).rejects.toBeInstanceOf(BadRequestException);
+    skillRepo.findOneBy.mockResolvedValueOnce({ id: 's1', name: 'TypeScript' }).mockResolvedValueOnce({ id: 's2', name: 'React' });
+    await expect(controller.setSkills(student, { skills: [{ id: 's1', proficiency: 'proficient' }, { id: 's2' }] })).resolves.toEqual([{ id: 's1', name: 'TypeScript', proficiency: 'PROFICIENT' }, { id: 's2', name: 'React', proficiency: undefined }]);
+    expect(links.delete).toHaveBeenCalled();
+  });
+
+  it('lists applications by student, admin and company membership', async () => {
+    const { controller, repos } = createController(); repos[10].findBy.mockResolvedValue([{ id: 'student-app' }]);
+    await expect(controller.applications(student)).resolves.toEqual([{ id: 'student-app' }]);
+    repos[10].find.mockResolvedValue([{ id: 'admin-app' }]); await expect(controller.applications({ ...student, role: 'ADMIN' })).resolves.toEqual([{ id: 'admin-app' }]);
+    repos[6].findBy.mockResolvedValue([{ companyId: 'c1' }]); repos[7].findBy.mockResolvedValue([{ id: 'p1' }]); repos[10].findBy.mockResolvedValue([{ id: 'company-app' }]);
+    await expect(controller.applications({ ...student, role: 'COMPANY_STAFF' })).resolves.toEqual([{ id: 'company-app' }]);
+  });
+});
+
+describe('auth controller', () => {
+  const user = { id: 'u1', email: 'user@example.test', fullName: 'User', passwordHash: 'hash' } as any;
+  it('issues a session for a valid role and rejects invalid credentials/roles', async () => {
+    const users = { findOneBy: jest.fn().mockResolvedValue(user) }; const roles = { findBy: jest.fn().mockResolvedValue([{ role: 'STUDENT' }]) }; const sessions = { save: jest.fn().mockResolvedValue({ id: 'session', activeRole: 'STUDENT', version: 1 }) }; const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') };
+    jest.spyOn(require('bcrypt'), 'compare').mockResolvedValue(true);
+    const controller = new AuthController(users as any, roles as any, sessions as any, jwt as any);
+    await expect(controller.signIn({ email: ' USER@example.test ', password: 'pw' })).resolves.toMatchObject({ accessToken: 'jwt', tokenType: 'Bearer', activeRole: 'STUDENT' });
+    roles.findBy.mockResolvedValue([{ role: 'STUDENT' }]); await expect(controller.signIn({ email: user.email, password: 'pw', activeRole: 'ADMIN' })).rejects.toBeInstanceOf(BadRequestException);
+    users.findOneBy.mockResolvedValue(null); await expect(controller.signIn({ email: user.email, password: 'pw' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+  it('revokes the current session on sign out', async () => {
+    const sessions = { update: jest.fn() }; const controller = new AuthController({} as any, {} as any, sessions as any, {} as any);
+    await expect(controller.signOut({ id: 'u', sid: 's', role: 'STUDENT', roles: [], version: 1 })).resolves.toEqual({ ok: true });
+    expect(sessions.update).toHaveBeenCalledWith('s', expect.objectContaining({ revokedAt: expect.any(Date) }));
   });
 });

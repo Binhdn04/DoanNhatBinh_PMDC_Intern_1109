@@ -46,6 +46,10 @@ describe('API services and guards', () => {
     client.bucketExists = jest.fn().mockResolvedValue(false); client.makeBucket = jest.fn();
     await service.onModuleInit();
     expect(client.makeBucket).toHaveBeenCalled();
+    client.putObject = jest.fn().mockResolvedValue({ etag: 'x' }); client.statObject = jest.fn().mockResolvedValue({ size: 1 }); client.removeObject = jest.fn();
+    await service.put('key', Buffer.from('x'), 'text/plain'); await service.putStream('stream', Readable.from(['x']), 1, 'text/plain'); await expect(service.get('key')).resolves.toBeInstanceOf(Readable); await expect(service.stat('key')).resolves.toEqual({ size: 1 }); await service.remove('key');
+    expect(client.putObject).toHaveBeenCalledTimes(2); expect(client.removeObject).toHaveBeenCalledWith(expect.any(String), 'key');
+    client.bucketExists.mockRejectedValueOnce(new Error('offline')); await expect(service.onModuleInit()).resolves.toBeUndefined();
   });
 
   it('reports scheduler freshness', () => {
