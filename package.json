@@ -5,6 +5,13 @@
   "scripts": {
     "dev:web": "pnpm --filter @internhub/web dev",
     "build:web": "pnpm --filter @internhub/web build",
-    "typecheck:web": "pnpm --filter @internhub/web typecheck"
+    "typecheck:web": "pnpm --filter @internhub/web typecheck",
+    "dev:api": "pnpm --filter @internhub/api start:dev",
+    "build:api": "pnpm --filter @internhub/api build",
+    "typecheck:api": "pnpm --filter @internhub/api typecheck",
+    "test:api": "pnpm --filter @internhub/api test",
+    "db:migrate": "pnpm --filter @internhub/api migration:run",
+    "db:seed": "pnpm --filter @internhub/api seed",
+    "contracts:generate": "pnpm --filter @internhub/contracts generate"
   }
 }
