@@ -208,7 +208,22 @@ pnpm typecheck:web
 pnpm build:web
 ```
 
-The prototype is intentionally frontend-only. It has no initialized backend, database, external integration, or API client yet.
+### Demo accounts
+
+After the API database has been seeded, sign in at the Vite URL (normally `http://localhost:5173/`) with any of these accounts. All use the password `InternHub123!`.
+
+| Role | Email |
+| --- | --- |
+| Student | `student@internhub.local` |
+| Company Staff | `staff@internhub.local` |
+| Supervisor | `supervisor@internhub.local` |
+| Admin | `admin@internhub.local` |
+
+If the accounts are not present yet, apply the database migrations and run:
+
+```bash
+pnpm --filter @internhub/api seed
+```
 
 ## 10. Documentation
 

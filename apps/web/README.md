@@ -1,6 +1,6 @@
 # @internhub/web
 
-React 19, TypeScript, Vite, and Tailwind CSS prototype for InternHub. It intentionally uses frontend mock data and local React state; it does not include React Router, backend clients, or API dependencies.
+React 19, TypeScript, Vite, and Tailwind CSS frontend for InternHub. It uses React Router, TanStack Query, session-scoped JWT storage, and the running NestJS controller at `/api/v1` by default.
 
 ## Run from the repository root
 
@@ -12,6 +12,8 @@ pnpm dev:web
 ```
 
 Use `pnpm typecheck:web` and `pnpm build:web` to validate the application.
+
+Use `pnpm test:web` for the frontend unit tests. Copy `.env.example` to `.env.local` only when the API is hosted away from the Vite origin.
 
 ## Source layout
 
@@ -29,4 +31,4 @@ src/
   styles/              # global Tailwind entry stylesheet
 ```
 
-The existing screen callbacks and mock state are intentionally retained during this structural refactor.
+Only controller-backed flows are exposed. Workflows without a currently running endpoint show an explicit unavailable state instead of mock data.

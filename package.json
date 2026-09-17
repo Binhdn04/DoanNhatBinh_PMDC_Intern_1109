@@ -6,6 +6,7 @@
     "dev:web": "pnpm --filter @internhub/web dev",
     "build:web": "pnpm --filter @internhub/web build",
     "typecheck:web": "pnpm --filter @internhub/web typecheck",
+    "test:web": "pnpm --filter @internhub/web test",
     "dev:api": "pnpm --filter @internhub/api start:dev",
     "build:api": "pnpm --filter @internhub/api build",
     "typecheck:api": "pnpm --filter @internhub/api typecheck",
