@@ -13,4 +13,9 @@ describe('canonical legacy mapper', () => {
   it('quarantines malformed legacy skill containers', () => {
     expect(mapLegacySkills({ name: 'SQL' }, 'posting').rejected[0].reason).toBe('NOT_AN_ARRAY');
   });
+  it('rejects invalid names and posting importance while retaining valid rows', () => {
+    const result = mapLegacySkills([{ name: 42 }, { name: 'SQL', importance: 'optional' }, { name: 'Go', importance: 'wrong' }], 'posting');
+    expect(result.accepted).toEqual([{ name: 'SQL', normalizedName: 'sql', proficiency: undefined, importance: 'OPTIONAL' }]);
+    expect(result.rejected.map(item => item.reason)).toEqual(['INVALID_SKILL_NAME', 'INVALID_IMPORTANCE']);
+  });
 });
