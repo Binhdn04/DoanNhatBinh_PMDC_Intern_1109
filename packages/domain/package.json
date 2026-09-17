@@ -1,0 +1,1 @@
+{"name":"@internhub/domain","private":true,"version":"0.1.0","scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc --noEmit","test":"jest --config jest.config.cjs --runInBand"},"devDependencies":{"@types/jest":"^30.0.0","jest":"^30.0.5","ts-jest":"^29.4.0","typescript":"^5.9.2"}}
