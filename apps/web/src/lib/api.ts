@@ -1,36 +1,35 @@
 import type {
-  SessionResponse,
-  Profile,
-  Skill,
-  Preferences,
-  Document,
-  PostingSkill,
-  Posting,
   Application,
-  Supervisor,
-  ReportingPeriod,
-  Report,
-  Placement,
-  Task,
+  components,
+  Document,
   Notification,
+  Placement,
+  Posting,
+  Preferences,
+  Profile,
+  Report,
+  ReportingPeriod,
+  SessionResponse,
+  Skill,
+  Supervisor,
+  Task,
 } from "../../../../packages/contracts/src";
 export type {
-  SessionResponse,
-  Profile,
-  Skill,
-  Preferences,
-  Document,
-  PostingSkill,
-  Posting,
   Application,
-  Supervisor,
-  ReportingPeriod,
-  Report,
-  Placement,
-  Task,
+  Document,
   Notification,
+  Placement,
+  Posting,
+  PostingSkill,
+  Preferences,
+  Profile,
+  Report,
+  ReportingPeriod,
+  SessionResponse,
+  Skill,
+  Supervisor,
+  Task,
 } from "../../../../packages/contracts/src";
-import type { components } from "../../../../packages/contracts/src";
 export type ApiRole = components["schemas"]["Role"];
 
 export class ApiError extends Error {
@@ -115,14 +114,15 @@ export const endpoints = {
     }),
   withdraw: (id: string) =>
     api<Application>(`/applications/${id}/withdraw`, { method: "POST" }),
-  placements: () => api<Placement[]>("/placements"),
+  placements: (page = 1) => api<Placement[]>(`/placements?page=${page}`),
   placement: (id: string) => api<Placement>(`/placements/${id}`),
   placementLifecycle: (id: string, targetStatus: string) =>
     api<Placement>(`/placements/${id}/lifecycle`, {
       method: "POST",
       body: JSON.stringify({ targetStatus }),
     }),
-  tasks: (id: string) => api<Task[]>(`/placements/${id}/tasks`),
+  tasks: (id: string, page = 1) =>
+    api<Task[]>(`/placements/${id}/tasks?page=${page}`),
   createTask: (id: string, body: Record<string, unknown>) =>
     api<Task>(`/placements/${id}/tasks`, {
       method: "POST",
@@ -133,7 +133,8 @@ export const endpoints = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  notifications: () => api<Notification[]>("/notifications"),
+  notifications: (page = 1) =>
+    api<Notification[]>(`/notifications?page=${page}`),
   markRead: (id: string) =>
     api<{ updated: number }>(`/notifications/${id}/read`, { method: "POST" }),
 
@@ -201,7 +202,7 @@ export const endpoints = {
     api<Posting>("/postings", { method: "POST", body: JSON.stringify(body) }),
   savePosting: (id: string) =>
     api<{ saved: boolean }>(`/postings/${id}/saved`, { method: "PUT" }),
-  applications: () => api<Application[]>("/applications"),
+  applications: (page = 1) => api<Application[]>(`/applications?page=${page}`),
   application: (id: string) => api<Application>(`/applications/${id}`),
   apply: (body: Record<string, unknown>) =>
     api<Application>("/applications", {
@@ -269,18 +270,7 @@ export const endpoints = {
     ),
   monitoring: (params = "") =>
     api<Record<string, unknown>>(`/monitoring${params ? `?${params}` : ""}`),
-  createAiJob: (body: Record<string, unknown>) =>
-    api<{ id: string; status: string }>("/ai-jobs", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  aiJob: (id: string) =>
-    api<{
-      id: string;
-      status: string;
-      generatedContent?: string;
-      errorCode?: string;
-    }>(`/ai-jobs/${id}`),
+
 };
 
 export async function sha256(file: File) {

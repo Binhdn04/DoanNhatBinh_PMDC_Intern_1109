@@ -1,3 +1,4 @@
+import { DocumentDownload } from "./document-download";
 import { endpoints, uploadDocument, type Skill } from "@/lib/api";
 import {
   Button,
@@ -141,6 +142,7 @@ export function ProfilePage() {
           <Field label="Bio">
             <TextArea name="bio" defaultValue={p.bio} />
           </Field>
+          {save.error && <ErrorMessage error={save.error} />}
           {notice && <p className="subtle">{notice}</p>}
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save profile"}
@@ -172,11 +174,15 @@ export function ProfilePage() {
             }}
           />
         </Field>
+        {remove.error && <ErrorMessage error={remove.error} />}
         {upload.error && <ErrorMessage error={upload.error} />}
         {documents.data!.items.map((doc) => (
           <div className="file-row" key={doc.id}>
             <strong>{doc.originalName}</strong>
             <Status tone={tone(doc.state)}>{doc.state}</Status>
+            {doc.state === "AVAILABLE" && (
+              <DocumentDownload id={doc.id} name={doc.originalName} />
+            )}
             <Button
               variant="ghost"
               disabled={remove.isPending}
@@ -206,8 +212,12 @@ export function SkillEditor({
       .join("\n"),
   );
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>();
+  const [saved, setSaved] = useState(false);
   const submit = async () => {
     setBusy(true);
+    setError(undefined);
+    setSaved(false);
     try {
       await onSave(
         value
@@ -222,6 +232,9 @@ export function SkillEditor({
             };
           }),
       );
+      setSaved(true);
+    } catch (error) {
+      setError(error);
     } finally {
       setBusy(false);
     }
@@ -235,6 +248,8 @@ export function SkillEditor({
         placeholder="React | INTERMEDIATE"
       />
       <p className="subtle">One skill per line: name | proficiency.</p>
+      {Boolean(error) && <ErrorMessage error={error} />}
+      {saved && <p role="status">Skills saved.</p>}
       <Button onClick={() => void submit()} disabled={busy}>
         {busy ? "Saving…" : "Save skills"}
       </Button>

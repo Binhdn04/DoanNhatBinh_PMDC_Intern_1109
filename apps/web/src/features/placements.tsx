@@ -1,3 +1,4 @@
+import { Pagination } from "./pagination";
 import { endpoints } from "@/lib/api";
 import {
   Button,
@@ -13,9 +14,10 @@ import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useSession } from "../app/session";
 export function PlacementsPage() {
+  const [page, setPage] = useState(1);
   const rows = useQuery({
-    queryKey: ["placements"],
-    queryFn: endpoints.placements,
+    queryKey: ["placements", page],
+    queryFn: () => endpoints.placements(page),
   });
   return (
     <>
@@ -34,6 +36,12 @@ export function PlacementsPage() {
         </Card>
       ))}
       {rows.data?.length === 0 && <p>No placements yet.</p>}
+      <Pagination
+        page={page}
+        count={rows.data?.length ?? 0}
+        busy={rows.isFetching}
+        onChange={setPage}
+      />
     </>
   );
 }
@@ -45,9 +53,10 @@ export function PlacementPage() {
     queryKey: ["placement", placementId],
     queryFn: () => endpoints.placement(placementId),
   });
+  const [taskPage, setTaskPage] = useState(1);
   const tasks = useQuery({
-    queryKey: ["tasks", placementId],
-    queryFn: () => endpoints.tasks(placementId),
+    queryKey: ["tasks", placementId, taskPage],
+    queryFn: () => endpoints.tasks(placementId, taskPage),
   });
   const refresh = () =>
     client.invalidateQueries({ queryKey: ["tasks", placementId] });
@@ -94,7 +103,7 @@ export function PlacementPage() {
             Self-assessment
           </Link>
         )}
-        {supervisor && (
+        {(supervisor || activeRole === "STUDENT") && (
           <Link to={`/placements/${placementId}/performance-evaluation`}>
             Performance evaluation
           </Link>
@@ -128,6 +137,12 @@ export function PlacementPage() {
             )}
           </article>
         ))}
+        <Pagination
+          page={taskPage}
+          count={tasks.data?.length ?? 0}
+          busy={tasks.isFetching}
+          onChange={setTaskPage}
+        />
         {supervisor && row.data?.status === "ACTIVE" && (
           <>
             <Button onClick={() => setShowTask(!showTask)}>Assign task</Button>
@@ -184,10 +199,11 @@ export function PlacementPage() {
   );
 }
 export function NotificationsPage() {
+  const [page, setPage] = useState(1);
   const client = useQueryClient();
   const rows = useQuery({
-    queryKey: ["notifications"],
-    queryFn: endpoints.notifications,
+    queryKey: ["notifications", page],
+    queryFn: () => endpoints.notifications(page),
   });
   const read = useMutation({
     mutationFn: endpoints.markRead,
@@ -223,6 +239,12 @@ export function NotificationsPage() {
       ))}
       {read.error && <p role="alert">{read.error.message}</p>}
       {rows.data?.length === 0 && <p>No notifications.</p>}
+      <Pagination
+        page={page}
+        count={rows.data?.length ?? 0}
+        busy={rows.isFetching}
+        onChange={setPage}
+      />
     </>
   );
 }

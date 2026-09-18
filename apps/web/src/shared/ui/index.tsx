@@ -1,12 +1,12 @@
 import {
-  useEffect,
-  useId,
   cloneElement,
   isValidElement,
-  type ReactElement,
+  useEffect,
+  useId,
   useRef,
   type CSSProperties,
   type HTMLAttributes,
+  type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -112,10 +112,18 @@ export function Field({
   children: ReactNode;
 }) {
   const id = useId();
-  const control = isValidElement(children) ? cloneElement(children as ReactElement<{id?:string; 'aria-describedby'?:string}>, { id, 'aria-describedby': hint ? `${id}-hint` : undefined }) : children;
+  const control = isValidElement(children)
+    ? cloneElement(
+        children as ReactElement<{ id?: string; "aria-describedby"?: string }>,
+        { id, "aria-describedby": hint ? `${id}-hint` : undefined },
+      )
+    : children;
   return (
     <div className="field">
-      <label htmlFor={id}>{label}{required && <b aria-hidden="true"> *</b>}</label>
+      <label htmlFor={id}>
+        {label}
+        {required && <b aria-hidden="true"> *</b>}
+      </label>
       {control}
       {hint && <small id={`${id}-hint`}>{hint}</small>}
     </div>

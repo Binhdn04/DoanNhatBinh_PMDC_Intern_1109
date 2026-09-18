@@ -53,17 +53,6 @@ const rolePath: Record<ApiRole, string> = {
   SUPERVISOR: "/placements",
   ADMIN: "/monitoring",
 };
-const enabled = {
-  profile: true,
-  documents: true,
-  discover: true,
-  postings: true,
-  applications: true,
-  reports: true,
-  assessments: true,
-  monitoring: true,
-  ai: false,
-} as const;
 function RequireRole({
   roles,
   children,
@@ -148,6 +137,7 @@ function Login() {
 function Shell() {
   const { activeRole, user, changeRole, signOut } = useSession();
   const navigate = useNavigate();
+  const [roleError, setRoleError] = useState("");
   const location = useLocation();
   const roleLinks =
     activeRole === "STUDENT"
@@ -199,8 +189,18 @@ function Shell() {
               <select
                 value={activeRole}
                 onChange={async (event) => {
-                  await changeRole(event.target.value as ApiRole);
-                  navigate(rolePath[event.target.value as ApiRole]);
+                  const nextRole = event.target.value as ApiRole;
+                  try {
+                    setRoleError("");
+                    await changeRole(nextRole);
+                    navigate(rolePath[nextRole]);
+                  } catch (error) {
+                    setRoleError(
+                      error instanceof Error
+                        ? error.message
+                        : "Unable to switch role",
+                    );
+                  }
                 }}
               >
                 {user.roles.map((role) => (
@@ -213,13 +213,14 @@ function Shell() {
             <button
               className="account-button"
               aria-label="Sign out"
-              onClick={() => void signOut()}
+              onClick={() => void signOut().catch(() => undefined)}
             >
               {user.fullName.slice(0, 2).toUpperCase()} ⌄
             </button>
           </div>
         </div>
       </header>
+      {roleError && <p role="alert">{roleError}</p>}
       <main className="content">
         <Outlet />
       </main>
@@ -317,7 +318,7 @@ export default function ApiApp() {
           <Route
             path="placements/:placementId/performance-evaluation"
             element={
-              <RequireRole roles={["SUPERVISOR", "ADMIN"]}>
+              <RequireRole roles={["STUDENT", "SUPERVISOR", "ADMIN"]}>
                 <AssessmentPage kind="performance" />
               </RequireRole>
             }

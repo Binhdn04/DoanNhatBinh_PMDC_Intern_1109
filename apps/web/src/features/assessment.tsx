@@ -7,7 +7,7 @@ import {
   SelectInput,
   TextArea,
 } from "@/shared/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "../app/session";
@@ -20,7 +20,18 @@ export function AssessmentPage({ kind }: { kind: "self" | "performance" }) {
       ? endpoints.selfAssessment(placementId)
       : endpoints.performanceEvaluation(placementId),
   );
+  const placement = useData(["placement", placementId], () =>
+    endpoints.placement(placementId),
+  );
+  const editable =
+    placement.data?.status === "ACTIVE" &&
+    (kind === "self"
+      ? activeRole === "STUDENT"
+      : ["SUPERVISOR", "ADMIN"].includes(activeRole));
+  const client = useQueryClient();
   const save = useMutation({
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ["assessment", kind, placementId] }),
     mutationFn: (body: Record<string, unknown>) =>
       kind === "self"
         ? endpoints.putSelfAssessment(placementId, body)
@@ -67,98 +78,106 @@ export function AssessmentPage({ kind }: { kind: "self" | "performance" }) {
       />
       <Card>
         <form onSubmit={(event) => submit(event, "SUBMITTED")}>
-          <div className="form-grid">
-            <Field label="Technical practice" required>
-              <SelectInput
-                name="technicalPractice"
-                defaultValue={String(
-                  (data.ratings as Record<string, number> | undefined)
-                    ?.technicalPractice ?? 3,
-                )}
-              >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </SelectInput>
-            </Field>
-            <Field label="Communication" required>
-              <SelectInput
-                name="communication"
-                defaultValue={String(
-                  (data.ratings as Record<string, number> | undefined)
-                    ?.communication ?? 3,
-                )}
-              >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </SelectInput>
-            </Field>
-          </div>
-          {kind === "self" ? (
-            <>
-              <Field label="Reflection" required>
-                <TextArea
-                  name="reflection"
-                  defaultValue={String(data.reflection ?? "")}
-                  required
-                />
-              </Field>
-              <Field label="Learning outcomes" required>
-                <TextArea
-                  name="learningOutcomes"
-                  defaultValue={String(data.learningOutcomes ?? "")}
-                  required
-                />
-              </Field>
-            </>
-          ) : (
-            <>
-              <Field label="Completion decision" required>
+          <fieldset
+            disabled={!editable || save.isPending}
+            style={{ border: 0, padding: 0 }}
+          >
+            <div className="form-grid">
+              <Field label="Technical practice" required>
                 <SelectInput
-                  name="completionDecision"
-                  defaultValue={String(data.completionDecision ?? "PENDING")}
+                  name="technicalPractice"
+                  defaultValue={String(
+                    (data.ratings as Record<string, number> | undefined)
+                      ?.technicalPractice ?? 3,
+                  )}
                 >
-                  <option>PENDING</option>
-                  <option>PASSED</option>
-                  <option>FAILED</option>
-                  <option>INCOMPLETE</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
                 </SelectInput>
               </Field>
-              <Field label="Evaluator feedback">
-                <TextArea
-                  name="comments"
-                  defaultValue={String(data.comments ?? "")}
-                />
+              <Field label="Communication" required>
+                <SelectInput
+                  name="communication"
+                  defaultValue={String(
+                    (data.ratings as Record<string, number> | undefined)
+                      ?.communication ?? 3,
+                  )}
+                >
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </SelectInput>
               </Field>
-            </>
-          )}{" "}
-          {save.error && <ErrorMessage error={save.error} />}
-          <div className="form-actions">
-            <Button
-              variant="secondary"
-              onClick={(event) => {
-                const form = event.currentTarget.closest("form");
-                if (form)
-                  submit(
-                    {
-                      preventDefault: () => undefined,
-                      currentTarget: form,
-                    } as unknown as FormEvent<HTMLFormElement>,
-                    "DRAFT",
-                  );
-              }}
-            >
-              Save draft
-            </Button>
-            <Button type="submit" disabled={save.isPending}>
-              Submit
-            </Button>
-          </div>
+            </div>
+            {kind === "self" ? (
+              <>
+                <Field label="Reflection" required>
+                  <TextArea
+                    name="reflection"
+                    defaultValue={String(data.reflection ?? "")}
+                    required
+                  />
+                </Field>
+                <Field label="Learning outcomes" required>
+                  <TextArea
+                    name="learningOutcomes"
+                    defaultValue={String(data.learningOutcomes ?? "")}
+                    required
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label="Completion decision" required>
+                  <SelectInput
+                    name="completionDecision"
+                    defaultValue={String(data.completionDecision ?? "PENDING")}
+                  >
+                    <option>PENDING</option>
+                    <option>PASSED</option>
+                    <option>FAILED</option>
+                    <option>INCOMPLETE</option>
+                  </SelectInput>
+                </Field>
+                <Field label="Evaluator feedback">
+                  <TextArea
+                    name="comments"
+                    defaultValue={String(data.comments ?? "")}
+                  />
+                </Field>
+              </>
+            )}{" "}
+            {save.isSuccess && <p role="status">Assessment saved.</p>}
+            {save.error && <ErrorMessage error={save.error} />}
+            {editable && (
+              <div className="form-actions">
+                <Button
+                  variant="secondary"
+                  onClick={(event) => {
+                    const form = event.currentTarget.closest("form");
+                    if (form)
+                      submit(
+                        {
+                          preventDefault: () => undefined,
+                          currentTarget: form,
+                        } as unknown as FormEvent<HTMLFormElement>,
+                        "DRAFT",
+                      );
+                  }}
+                >
+                  Save draft
+                </Button>
+                <Button type="submit" disabled={save.isPending}>
+                  Submit
+                </Button>
+              </div>
+            )}
+          </fieldset>
         </form>
       </Card>
     </>

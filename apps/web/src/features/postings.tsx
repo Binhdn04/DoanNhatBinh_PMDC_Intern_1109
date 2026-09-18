@@ -1,3 +1,4 @@
+import { Pagination } from "./pagination";
 import { endpoints, type Posting } from "@/lib/api";
 import {
   Button,
@@ -176,7 +177,10 @@ export function PostingDetail() {
 }
 export function PostingsPage() {
   const { activeRole } = useSession();
-  const query = useData(["postings", activeRole], () => endpoints.postings());
+  const [page, setPage] = useState(1);
+  const query = useData(["postings", activeRole, String(page)], () =>
+    endpoints.postings({ page }),
+  );
   if (query.isLoading) return <Loading />;
   if (query.error) return <ErrorMessage error={query.error} />;
   return (
@@ -191,6 +195,12 @@ export function PostingsPage() {
         }
       />
       <PostingTable postings={query.data!} />
+      <Pagination
+        page={page}
+        count={query.data!.length}
+        busy={query.isFetching}
+        onChange={setPage}
+      />
     </>
   );
 }

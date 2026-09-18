@@ -53,6 +53,7 @@ export function SessionProvider({
     ready: false,
   }));
   const clear = () => {
+    configureApi({ getToken: () => "", onUnauthorized: () => undefined });
     write(null);
     client.clear();
     setSession({
@@ -71,17 +72,25 @@ export function SessionProvider({
       setSession((value) => ({ ...value, ready: true }));
       return;
     }
+    let active = true;
     endpoints
       .me()
-      .then((me) =>
-        setSession((value) => ({
-          ...value,
-          activeRole: me.activeRole,
-          user: { ...value.user, id: me.id, roles: me.roles },
-          ready: true,
-        })),
+      .then(
+        (me) =>
+          active &&
+          setSession((value) => ({
+            ...value,
+            activeRole: me.activeRole,
+            user: { ...value.user, id: me.id, roles: me.roles },
+            ready: true,
+          })),
       )
-      .catch(clear);
+      .catch(() => {
+        if (active) clear();
+      });
+    return () => {
+      active = false;
+    };
   }, [session.accessToken]);
   const value = useMemo<SessionContextValue>(
     () => ({
@@ -93,6 +102,10 @@ export function SessionProvider({
           activeRole: next.activeRole,
           user: next.user,
         };
+        configureApi({
+          getToken: () => stored.accessToken,
+          onUnauthorized: clear,
+        });
         write(stored);
         client.clear();
         setSession({ ...stored, ready: true });
@@ -111,6 +124,10 @@ export function SessionProvider({
           activeRole: next.activeRole,
           user: session.user,
         };
+        configureApi({
+          getToken: () => stored.accessToken,
+          onUnauthorized: clear,
+        });
         write(stored);
         client.clear();
         setSession({ ...stored, ready: true });

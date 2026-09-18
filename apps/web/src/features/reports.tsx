@@ -1,3 +1,4 @@
+import { DocumentDownload } from "./document-download";
 import { endpoints } from "@/lib/api";
 import {
   Button,
@@ -134,6 +135,14 @@ export function ReportDetailPage() {
         ) : (
           <p>No submitted version.</p>
         )}
+        {version?.attachmentDocumentIds?.map((id, index) => (
+          <DocumentDownload
+            key={id}
+            id={id}
+            name={`report-attachment-${index + 1}`}
+            label={`Download attachment ${index + 1}`}
+          />
+        ))}
         {report.reviews?.map((r, i) => (
           <p key={i}>
             {r.outcome}: {r.feedback}

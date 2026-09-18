@@ -1,3 +1,5 @@
+import { DocumentDownload } from "./document-download";
+import { Pagination } from "./pagination";
 import { endpoints, type Application } from "@/lib/api";
 import {
   Button,
@@ -105,14 +107,17 @@ export function ApplyPage() {
 }
 export function ApplicationsPage() {
   const { activeRole } = useSession();
-  const query = useData(["applications", activeRole], endpoints.applications);
+  const [page, setPage] = useState(1);
+  const query = useData(["applications", activeRole, String(page)], () =>
+    endpoints.applications(page),
+  );
   if (query.isLoading) return <Loading />;
   if (query.error) return <ErrorMessage error={query.error} />;
   return (
     <>
       <PageHeader
         title={activeRole === "STUDENT" ? "My applications" : "Applications"}
-        description="Only API-supported application actions are available."
+        description="Track applications and their review history."
       />
       <Card>
         <div className="table-wrap">
@@ -145,6 +150,12 @@ export function ApplicationsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          count={query.data!.length}
+          busy={query.isFetching}
+          onChange={setPage}
+        />
         {!query.data!.length && (
           <p className="subtle">No applications found.</p>
         )}
@@ -171,6 +182,13 @@ export function ApplicationPage() {
       <div className="grid two">
         <Card>
           <h2 className="section-title">Submitted application</h2>
+          {application.cvDocumentId && (
+            <DocumentDownload
+              id={application.cvDocumentId}
+              name="application-cv"
+              label="Download CV"
+            />
+          )}
           <p>
             <strong>{application.contactName}</strong>
             <br />
@@ -255,6 +273,7 @@ export function AcceptModal({
           });
         }}
       >
+        {supervisors.error && <ErrorMessage error={supervisors.error} />}
         <Field label="Supervisor" required>
           <SelectInput name="supervisorUserId" required>
             {list.map((supervisor) => (
