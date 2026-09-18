@@ -54,6 +54,7 @@ export interface Posting {
   match?: { score: number; matchedSkills: string[]; missingSkills: string[] };
 }
 export interface Application {
+  cvDocumentId?: string;
   id: string;
   postingId: string;
   studentId: string;
@@ -87,12 +88,16 @@ export interface ReportingPeriod {
   dueAt: string;
 }
 export interface Report {
+  weekStart?: string;
+  weekEnd?: string;
+  dueAt?: string;
   id: string;
   placementId: string;
   reportingPeriodId: string;
   state: string;
   currentVersionNo: number;
   draft?: {
+    reportingPeriodId?: string;
     accomplishments: string;
     challenges: string;
     nextWeekPlan: string;

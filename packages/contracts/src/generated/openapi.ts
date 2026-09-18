@@ -1174,7 +1174,7 @@ export interface components {
             accomplishments: string;
             challenges: string;
             nextWeekPlan: string;
-            attachments?: components["schemas"]["Document"][];
+            attachmentDocumentIds?: components["schemas"]["Id"][];
             submittedAt: components["schemas"]["Timestamp"];
         };
         ReportReviewInput: {

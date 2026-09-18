@@ -3027,10 +3027,10 @@ components:
           type: string
         nextWeekPlan:
           type: string
-        attachments:
+        attachmentDocumentIds:
           type: array
           items:
-            $ref: '#/components/schemas/Document'
+            $ref: '#/components/schemas/Id'
         submittedAt:
           $ref: '#/components/schemas/Timestamp'
     ReportReviewInput:
