@@ -98,22 +98,24 @@ describe("ApiApp utilities and routes", () => {
       roles: ["STUDENT"],
       activeRole: "STUDENT",
     });
-    vi.spyOn(endpoints, "postings").mockResolvedValue([
-      {
-        id: "p1",
-        title: "React Intern",
-        description: "Frontend",
-        location: "HCM",
-        workArrangement: "REMOTE",
-        durationWeeks: 12,
-        openings: 1,
-        applicationDeadline: "2027-01-01",
-        status: "OPEN",
-        companyId: "c",
-        skills: [],
-        match: { score: 80, matchedSkills: [], missingSkills: [] },
-      },
-    ] as any);
+    vi.spyOn(endpoints, "postings")
+      .mockResolvedValueOnce([
+        {
+          id: "p1",
+          title: "React Intern",
+          description: "Frontend",
+          location: "HCM",
+          workArrangement: "REMOTE",
+          durationWeeks: 12,
+          openings: 1,
+          applicationDeadline: "2027-01-01",
+          status: "OPEN",
+          companyId: "c",
+          skills: [],
+          match: { score: 80, matchedSkills: [], missingSkills: [] },
+        },
+      ] as any)
+      .mockResolvedValue([]);
     setup("/discover");
     await screen.findByText("React Intern");
     fireEvent.change(screen.getByLabelText("Search postings"), {

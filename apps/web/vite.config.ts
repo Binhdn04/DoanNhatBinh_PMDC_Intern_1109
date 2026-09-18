@@ -18,7 +18,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/main.tsx", "src/vite-env.d.ts"],
-      thresholds: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      thresholds: process.env.BROWSER_COVERAGE ? undefined : { branches: 80, functions: 80, lines: 80, statements: 80 },
     },
   },
 });

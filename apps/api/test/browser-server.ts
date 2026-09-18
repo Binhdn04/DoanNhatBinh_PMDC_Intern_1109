@@ -37,13 +37,11 @@ async function start() {
     "SUPERVISOR",
     "ADMIN",
   ] as const) {
-    const user = await db
-      .getRepository(User)
-      .save({
-        email: `${role.toLowerCase()}@example.test`,
-        fullName: role,
-        passwordHash,
-      });
+    const user = await db.getRepository(User).save({
+      email: `${role.toLowerCase()}@example.test`,
+      fullName: role,
+      passwordHash,
+    });
     await db.getRepository(UserRole).save({ userId: user.id, role });
     if (role === "COMPANY_STAFF") staffId = user.id;
     if (role === "SUPERVISOR")

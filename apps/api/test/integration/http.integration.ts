@@ -1,3 +1,4 @@
+import { MaintenanceService } from "../../src/modules/maintenance.service";
 import "reflect-metadata";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
@@ -15,7 +16,6 @@ import {
   Company,
   CompanyStaff,
   SupervisorProfile,
-  Document,
   AuthSession,
 } from "../../src/infrastructure/database/entities";
 import { ApiModule } from "../../src/modules/api.module";
@@ -81,7 +81,7 @@ beforeAll(async () => {
   } as any);
   await db.initialize();
   await db.runMigrations();
-  const module = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [
       JwtModule.register({
         global: true,
@@ -95,10 +95,10 @@ beforeAll(async () => {
       } as any),
       ApiModule,
     ],
-  })
-    .overrideProvider(PrivateStorageService)
-    .useValue(storage)
-    .compile();
+  });
+  if (process.env.MINIO_INTEGRATION !== "1")
+    builder.overrideProvider(PrivateStorageService).useValue(storage);
+  const module = await builder.compile();
   app = module.createNestApplication();
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(
@@ -121,13 +121,11 @@ beforeAll(async () => {
     replacement: "SUPERVISOR",
     admin: "ADMIN",
   })) {
-    const user = await db
-      .getRepository(User)
-      .save({
-        email: `${key}@example.test`,
-        fullName: key,
-        passwordHash: hash,
-      });
+    const user = await db.getRepository(User).save({
+      email: `${key}@example.test`,
+      fullName: key,
+      passwordHash: hash,
+    });
     ids[key] = user.id;
     await db
       .getRepository(UserRole)
@@ -447,6 +445,168 @@ it("assigns tasks, scopes status writes, and preserves immutable report versions
     ]),
   ).rejects.toThrow("immutable");
 });
+it("keeps assessment drafts private and validates submission completeness", async () => {
+  expect(
+    (await request("student", `/placements/${placementId}/self-assessment`))
+      .status,
+  ).toBe(404);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/performance-evaluation`,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/self-assessment`,
+        "PUT",
+        { status: "DRAFT", ratings: {} },
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (await request("supervisor", `/placements/${placementId}/self-assessment`))
+      .status,
+  ).toBe(404);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/self-assessment`,
+        "PUT",
+        {
+          status: "SUBMITTED",
+          ratings: { technical: 7 },
+          reflection: "R",
+          learningOutcomes: "L",
+        },
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/self-assessment`,
+        "PUT",
+        { status: "SUBMITTED", ratings: { technical: 4 } },
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/self-assessment`,
+        "PUT",
+        {
+          status: "SUBMITTED",
+          ratings: {},
+          reflection: "R",
+          learningOutcomes: "L",
+        },
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await request(
+        "supervisor",
+        `/placements/${placementId}/performance-evaluation`,
+        "PUT",
+        { status: "DRAFT", completionDecision: "PENDING", ratings: {} },
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/performance-evaluation`,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await request(
+        "admin",
+        `/placements/${placementId}/performance-evaluation`,
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await request(
+        "supervisor",
+        `/placements/${placementId}/performance-evaluation`,
+        "PUT",
+        {
+          status: "SUBMITTED",
+          completionDecision: "PASSED",
+          ratings: { technical: 0 },
+        },
+      )
+    ).status,
+  ).toBe(400);
+  // Remove the author draft so the replacement supervisor may author their own evaluation later.
+  await db.query("DELETE FROM performance_evaluations WHERE placement_id=$1", [
+    placementId,
+  ]);
+});
+it("runs deadline scans idempotently and exposes failed scheduler readiness", async () => {
+  const scheduler = app.get(MaintenanceService);
+  await db.query(
+    "INSERT INTO reporting_periods(placement_id,week_start,week_end,due_at) VALUES($1,'2026-09-07','2026-09-13',now()-interval '1 hour')",
+    [placementId],
+  );
+  await request("other", `/postings/${postingId}/saved`, "PUT");
+  await db.query(
+    "UPDATE postings SET application_deadline=current_date,deadline_timezone='UTC' WHERE id=$1",
+    [postingId],
+  );
+  await scheduler.scanDeadlines();
+  const before = (await request("student", "/notifications")).data.length;
+  await scheduler.scanDeadlines();
+  expect((await request("student", "/notifications")).data).toHaveLength(
+    before,
+  );
+  expect((await request("", "/health")).status).toBe(200);
+  const fail = jest
+    .spyOn(scheduler as any, "performDeadlineScan")
+    .mockRejectedValueOnce(new Error("Database temporarily unavailable"));
+  await scheduler.scanDeadlines();
+  expect((await request("", "/health")).status).toBe(503);
+  fail.mockRestore();
+  await scheduler.scanDeadlines();
+  expect((await request("", "/health")).status).toBe(200);
+  const content = Buffer.from("%PDF-orphan");
+  const started = await request("student", "/documents", "POST", {
+    originalName: "orphan.pdf",
+    contentType: "application/pdf",
+    sizeBytes: content.length,
+    sha256: createHash("sha256").update(content).digest("hex"),
+  });
+  await db.query(
+    "UPDATE documents SET created_at=now()-interval '2 days' WHERE id=$1",
+    [started.data.document.id],
+  );
+  await scheduler.cleanupDocuments();
+  const [doc] = await db.query(
+    "SELECT state,storage_deleted_at FROM documents WHERE id=$1",
+    [started.data.document.id],
+  );
+  expect(doc.state).toBe("DELETED");
+  expect(doc.storage_deleted_at).not.toBeNull();
+  await scheduler.cleanupDocuments();
+  await db.query(
+    "UPDATE postings SET application_deadline='2099-12-31' WHERE id=$1",
+    [postingId],
+  );
+});
 it("immediately denies revoked supervisors, including linked documents", async () => {
   const history = await request(
     "admin",
@@ -544,6 +704,397 @@ it("scopes monitoring, notifications and terminal writes", async () => {
     ).status,
   ).toBe(403);
 });
+it("updates profiles and preferences without accepting duplicate or unknown skills", async () => {
+  expect((await request("student", "/students/me")).status).toBe(200);
+  expect(
+    (
+      await request("student", "/students/me", "PATCH", {
+        university: "Updated",
+        major: "Engineering",
+        graduationYear: 2027,
+        bio: "Testing",
+      })
+    ).data.university,
+  ).toBe("Updated");
+  const pref = {
+    industries: ["Technology"],
+    locations: ["Hanoi"],
+    workArrangements: ["REMOTE"],
+    minDurationWeeks: 8,
+    maxDurationWeeks: 16,
+  };
+  expect((await request("student", "/students/me/preferences")).status).toBe(
+    200,
+  );
+  expect(
+    (await request("student", "/students/me/preferences", "PUT", pref)).status,
+  ).toBe(200);
+  expect(
+    (
+      await request("student", "/students/me/preferences", "PUT", {
+        ...pref,
+        minDurationWeeks: 20,
+      })
+    ).status,
+  ).toBe(400);
+  const skills = (await request("student", "/students/me/skills")).data;
+  expect(
+    (
+      await request("student", "/students/me/skills", "PUT", {
+        skills: [{ id: skills[0].id, proficiency: "BEGINNER" }],
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await request("student", "/students/me/skills", "PUT", {
+        skills: [{ id: randomUUID() }],
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (await request("student", "/students/me/skills", "PUT", { skills: [{}] }))
+      .status,
+  ).toBe(400);
+  expect(
+    (
+      await request("student", "/students/me/skills", "PUT", {
+        skills: [{ name: "TypeScript" }, { name: " TYPESCRIPT " }],
+      })
+    ).status,
+  ).toBe(400);
+  expect((await request("student", "/students/me/skills")).data).toHaveLength(
+    1,
+  );
+});
+it("paginates and scopes listing and search endpoints", async () => {
+  for (const role of ["student", "staff", "outsider", "admin", "replacement"]) {
+    expect(
+      (await request(role, "/postings?page=1&pageSize=1&sort=newest")).status,
+    ).toBe(200);
+    expect(
+      (await request(role, "/applications?page=1&pageSize=1")).status,
+    ).toBe(200);
+    expect((await request(role, "/placements?page=1&pageSize=1")).status).toBe(
+      200,
+    );
+  }
+  expect(
+    (
+      await request(
+        "student",
+        "/postings?search=Internship&sort=match_score&workArrangement=REMOTE",
+      )
+    ).data,
+  ).toHaveLength(1);
+  expect(
+    (
+      await request(
+        "student",
+        "/postings?search=NoSuchInternship&location=Nowhere",
+      )
+    ).data,
+  ).toEqual([]);
+  expect((await request("student", "/postings?page=0")).status).toBe(400);
+  expect(
+    (await request("student", `/postings/${postingId}`)).data.match.score,
+  ).toBe(100);
+  expect((await request("staff", `/companies/${companyId}`)).status).toBe(200);
+  expect((await request("staff", `/companies/${randomUUID()}`)).status).toBe(
+    404,
+  );
+  expect((await request("staff", "/companies/mine")).data[0].id).toBe(
+    companyId,
+  );
+  expect((await request("outsider", "/companies/mine")).data).toEqual([]);
+  expect((await request("staff", "/supervisors")).status).toBe(400);
+  expect(
+    (
+      await request(
+        "admin",
+        `/supervisors?placementId=${placementId}&search=replacement`,
+      )
+    ).data.items,
+  ).toHaveLength(1);
+  expect(
+    (await request("outsider", `/supervisors?applicationId=${applicationId}`))
+      .status,
+  ).toBe(403);
+  expect(
+    (await request("staff", `/supervisors?applicationId=${randomUUID()}`))
+      .status,
+  ).toBe(404);
+  expect((await request("student", `/placements/${randomUUID()}`)).status).toBe(
+    404,
+  );
+  expect(
+    (await request("student", `/applications/${randomUUID()}`)).status,
+  ).toBe(404);
+});
+it("keeps completed placement records readable and rejects further writes", async () => {
+  for (const role of ["student", "replacement", "admin"]) {
+    expect((await request(role, `/placements/${placementId}`)).status).toBe(
+      200,
+    );
+    expect(
+      (await request(role, `/placements/${placementId}/reports`)).data,
+    ).toHaveLength(1);
+    expect(
+      (await request(role, `/placements/${placementId}/self-assessment`)).data
+        .status,
+    ).toBe("SUBMITTED");
+    expect(
+      (await request(role, `/placements/${placementId}/performance-evaluation`))
+        .data.completionDecision,
+    ).toBe("PASSED");
+  }
+  expect(
+    (await request("staff", `/placements/${placementId}/self-assessment`))
+      .status,
+  ).toBe(404);
+  expect(
+    (await request("student", `/placements/${placementId}/tasks`)).data,
+  ).toHaveLength(1);
+  expect(
+    (
+      await request("replacement", `/placements/${placementId}/tasks`, "POST", {
+        title: "Late",
+        description: "No",
+        priority: "MEDIUM",
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await request(
+        "replacement",
+        `/placements/${placementId}/lifecycle`,
+        "POST",
+        { targetStatus: "TERMINATED" },
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await request(
+        "student",
+        `/placements/${placementId}/self-assessment`,
+        "PUT",
+        { status: "DRAFT", ratings: {} },
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await request(
+        "replacement",
+        `/placements/${placementId}/performance-evaluation`,
+        "PUT",
+        { status: "DRAFT", completionDecision: "PENDING", ratings: {} },
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await request(
+        "admin",
+        `/placements/${placementId}/supervisor-assignments`,
+        "PUT",
+        { reason: "Late reassignment", supervisorUserId: ids.supervisor },
+      )
+    ).status,
+  ).toBe(409);
+});
+it("issues authorized download tokens and denies expiry, tampering and reuse by another user", async () => {
+  const result = await request("student", `/documents/${cvId}/download-url`);
+  expect(result.status).toBe(200);
+  const url = new URL(result.data.url, origin);
+  const downloaded = await fetch(url, {
+    headers: { authorization: `Bearer ${tokens.student}` },
+  });
+  expect(downloaded.status).toBe(200);
+  expect(await downloaded.text()).toBe("%PDF-test-content");
+  expect(
+    (await fetch(url, { headers: { authorization: `Bearer ${tokens.staff}` } }))
+      .status,
+  ).toBe(403);
+  url.searchParams.set("transferToken", "invalid");
+  expect(
+    (
+      await fetch(url, {
+        headers: { authorization: `Bearer ${tokens.student}` },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (await request("staff", `/documents/${cvId}/download-url`)).status,
+  ).toBe(200);
+  expect(
+    (await request("replacement", `/documents/${cvId}/download-url`)).status,
+  ).toBe(200);
+  expect(
+    (await request("student", `/documents/${randomUUID()}/complete`, "POST"))
+      .status,
+  ).toBe(404);
+});
+it("rejects invalid document content and allows unreferenced document deletion", async () => {
+  const content = Buffer.from("not-a-pdf");
+  const begin = await request("student", "/documents", "POST", {
+    originalName: "bad.pdf",
+    contentType: "application/pdf",
+    sizeBytes: content.length,
+    sha256: createHash("sha256").update(content).digest("hex"),
+  });
+  const url = new URL(begin.data.uploadUrl, origin);
+  expect(
+    (
+      await fetch(url, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${tokens.student}`,
+          "content-type": "application/pdf",
+        },
+        body: content,
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await request(
+        "student",
+        `/documents/${begin.data.document.id}/complete`,
+        "POST",
+      )
+    ).data.state,
+  ).toBe("REJECTED");
+  expect(
+    (
+      await request(
+        "student",
+        `/documents/${begin.data.document.id}/complete`,
+        "POST",
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (await request("student", `/documents/${begin.data.document.id}`, "DELETE"))
+      .status,
+  ).toBe(204);
+  expect(
+    (await request("student", "/documents")).data.items.map(
+      (d: { id: string }) => d.id,
+    ),
+  ).not.toContain(begin.data.document.id);
+});
+it("supports saved-posting removal, withdrawal, rejection and posting close/archive", async () => {
+  expect(
+    (await request("student", `/postings/${postingId}/saved`, "PUT")).status,
+  ).toBe(200);
+  expect(
+    (await request("student", `/postings/${postingId}/saved`, "DELETE")).status,
+  ).toBe(200);
+  const body = {
+    companyId,
+    title: "Second role",
+    description: "Role",
+    workArrangement: "ONSITE",
+    durationWeeks: 8,
+    openings: 1,
+    applicationDeadline: "2099-12-31",
+    skills: [],
+  };
+  const second = await request("staff", "/postings", "POST", body);
+  expect(second.status).toBe(201);
+  const id = second.data.id;
+  expect(
+    (await request("staff", `/postings/${id}/publish`, "POST")).status,
+  ).toBe(201);
+  const input = {
+    postingId: id,
+    cvDocumentId: cvId,
+    coverNote: "Ready",
+    contactName: "Student",
+    contactEmail: "student@example.test",
+    contactPhone: "123",
+    university: "University",
+    major: "CS",
+    graduationYear: 2027,
+    availability: "Now",
+    supportingDocumentIds: [cvId],
+  };
+  const application = await request("student", "/applications", "POST", input);
+  expect(application.status).toBe(201);
+  expect(
+    (
+      await request(
+        "student",
+        `/applications/${application.data.id}/withdraw`,
+        "POST",
+      )
+    ).status,
+  ).toBe(201);
+  expect(
+    (
+      await request(
+        "student",
+        `/applications/${application.data.id}/withdraw`,
+        "POST",
+      )
+    ).status,
+  ).toBe(409);
+  for (const targetStatus of ["CLOSED", "ARCHIVED"])
+    expect(
+      (
+        await request("staff", `/postings/${id}/lifecycle`, "POST", {
+          targetStatus,
+        })
+      ).status,
+    ).toBe(201);
+  expect(
+    (await request("staff", `/postings/${id}/publish`, "POST")).status,
+  ).toBe(409);
+  expect(
+    (await request("student", "/applications", "POST", input)).status,
+  ).toBe(409);
+  expect(
+    (await request("student", "/notifications/mark-read", "POST")).status,
+  ).toBe(201);
+  expect(
+    (await request("student", "/notifications")).data.every(
+      (n: { readAt: string }) => Boolean(n.readAt),
+    ),
+  ).toBe(true);
+});
+it("replaces active-role tokens and revokes signed-out sessions", async () => {
+  await db
+    .getRepository(UserRole)
+    .save({ userId: ids.outsider, role: "STUDENT" });
+  const login = await request("", "/auth/sign-in", "POST", {
+    email: "outsider@example.test",
+    password: "Test-password1!",
+  });
+  expect(login.status).toBe(201);
+  tokens.outsider = login.data.accessToken;
+  expect(
+    (await request("outsider", "/me/active-role", "PUT", { role: "ADMIN" }))
+      .status,
+  ).toBe(403);
+  const switched = await request("outsider", "/me/active-role", "PUT", {
+    role: "STUDENT",
+  });
+  expect(switched.status).toBe(200);
+  expect((await request("outsider", "/me")).status).toBe(401);
+  tokens.outsider = switched.data.accessToken;
+  expect((await request("outsider", "/me")).data.activeRole).toBe("STUDENT");
+  expect(
+    (await request("outsider", "/me/active-role", "PUT", { role: "STUDENT" }))
+      .status,
+  ).toBe(200);
+  expect((await request("outsider", "/auth/sign-out", "POST")).status).toBe(
+    201,
+  );
+  expect((await request("outsider", "/me")).status).toBe(401);
+});
 it("rejects expired sessions and session/subject mismatches", async () => {
   const jwt = app.get(JwtService);
   const claim = jwt.decode(tokens.other);
@@ -556,4 +1107,14 @@ it("rejects expired sessions and session/subject mismatches", async () => {
     .update(claim.sid, { expiresAt: new Date(0) });
   tokens.other = jwt.sign(claim);
   expect((await request("other", "/me")).status).toBe(401);
+});
+it.each([
+ ['image/jpeg',Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3,4])],
+ ['image/png',Buffer.from([137,80,78,71,13,10,26,10])],
+ ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',Buffer.from([0x50,0x4b,0x03,0x04,1,2,3,4])],
+])('validates %s transfers and refuses overwriting completed documents',async(contentType,content)=>{
+ const started=await request('student','/documents','POST',{originalName:'attachment',contentType,sizeBytes:content.length,sha256:createHash('sha256').update(content).digest('hex')});expect(started.status).toBe(201);
+ const url=new URL(started.data.uploadUrl,origin);const upload=()=>fetch(url,{method:'PUT',headers:{authorization:`Bearer ${tokens.student}`,'content-type':contentType},body:content});
+ expect((await upload()).status).toBe(204);expect((await request('student',`/documents/${started.data.document.id}/complete`,'POST')).data.state).toBe('AVAILABLE');
+ expect((await upload()).status).toBe(409);expect((await request('student',`/documents/${started.data.document.id}/complete`,'POST')).data.state).toBe('AVAILABLE');
 });

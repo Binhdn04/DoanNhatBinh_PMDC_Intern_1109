@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpException,
-} from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Readable } from "node:stream";
 import { assert, SessionGuard } from "../src/modules/auth";
 import { ProblemFilter } from "../src/modules/problem.filter";
@@ -27,26 +23,22 @@ describe("API services and guards", () => {
 
   it("accepts a valid active session and rejects missing, invalid and revoked sessions", async () => {
     const jwt = {
-      verifyAsync: jest
-        .fn()
-        .mockResolvedValue({
-          id: "u1",
-          sid: "s1",
-          role: "STUDENT",
-          version: 1,
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        }),
+      verifyAsync: jest.fn().mockResolvedValue({
+        id: "u1",
+        sid: "s1",
+        role: "STUDENT",
+        version: 1,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
     } as any;
     const sessions = {
-      findOneBy: jest
-        .fn()
-        .mockResolvedValue({
-          id: "s1",
-          userId: "u1",
-          expiresAt: new Date(Date.now() + 3600000),
-          version: 1,
-          activeRole: "STUDENT",
-        }),
+      findOneBy: jest.fn().mockResolvedValue({
+        id: "s1",
+        userId: "u1",
+        expiresAt: new Date(Date.now() + 3600000),
+        version: 1,
+        activeRole: "STUDENT",
+      }),
     } as any;
     const users = {
       findOneBy: jest.fn().mockResolvedValue({ id: "u1" }),
@@ -82,25 +74,21 @@ describe("API services and guards", () => {
       );
     const guard = new SessionGuard(
       {
-        verifyAsync: jest
-          .fn()
-          .mockResolvedValue({
-            id: "u",
-            sid: "s",
-            role: "STUDENT",
-            version: 1,
-            exp: Math.floor(Date.now() / 1000) + 3600,
-          }),
+        verifyAsync: jest.fn().mockResolvedValue({
+          id: "u",
+          sid: "s",
+          role: "STUDENT",
+          version: 1,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
       } as any,
       {
-        findOneBy: jest
-          .fn()
-          .mockResolvedValue({
-            userId: "u",
-            expiresAt: new Date(Date.now() + 3600000),
-            version: 1,
-            activeRole: "STUDENT",
-          }),
+        findOneBy: jest.fn().mockResolvedValue({
+          userId: "u",
+          expiresAt: new Date(Date.now() + 3600000),
+          version: 1,
+          activeRole: "STUDENT",
+        }),
       } as any,
       { findOneBy: jest.fn().mockResolvedValue({}) } as any,
       { findBy: jest.fn().mockResolvedValue([{ role: "STUDENT" }]) } as any,

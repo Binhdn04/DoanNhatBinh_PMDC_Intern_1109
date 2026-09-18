@@ -36,6 +36,7 @@ try {
       env: {
         ...process.env,
         NODE_ENV: "test",
+        INTEGRATION_COVERAGE: process.argv.includes("--coverage") ? "true" : "",
         TEST_DATABASE_URL: `postgresql://internhub_test:test-only@localhost:${port}/internhub_test`,
       },
     },

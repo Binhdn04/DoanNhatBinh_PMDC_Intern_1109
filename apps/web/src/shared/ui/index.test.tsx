@@ -16,7 +16,9 @@ describe("shared UI", () => {
       </>,
     );
     expect(screen.getByText("Work address")).toBeInTheDocument();
-    expect(screen.getByLabelText("required")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Email" }),
+    ).toHaveAccessibleDescription("Work address");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(click).toHaveBeenCalledOnce();
   });

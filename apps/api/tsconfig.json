@@ -13,7 +13,9 @@
     "incremental": true,
     "strict": true,
     "skipLibCheck": true,
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
