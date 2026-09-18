@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface,QueryRunner } from 'typeorm';
 
 /** Final forward-only cutover from development arrays/JSON to canonical relations. */
 export class CompleteCanonicalSchema1770000003000 implements MigrationInterface {

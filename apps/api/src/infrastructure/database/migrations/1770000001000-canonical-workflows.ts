@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface,QueryRunner } from 'typeorm';
 
 /** Forward-only expansion of the first development schema. */
 export class CanonicalWorkflows1770000001000 implements MigrationInterface {

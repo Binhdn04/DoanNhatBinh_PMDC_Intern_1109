@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface,QueryRunner } from 'typeorm';
 export class InitialSchema1770000000000 implements MigrationInterface {
   async up(q: QueryRunner): Promise<void> { await q.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email varchar(320) UNIQUE NOT NULL, password_hash text NOT NULL, full_name varchar(200) NOT NULL, phone varchar(40), roles text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());

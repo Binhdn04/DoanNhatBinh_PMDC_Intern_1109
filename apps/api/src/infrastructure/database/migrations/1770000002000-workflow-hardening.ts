@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface,QueryRunner } from 'typeorm';
 
 /** Additive migration: old JSON snapshots remain readable, all new workflow writes use these relations. */
 export class WorkflowHardening1770000002000 implements MigrationInterface {
