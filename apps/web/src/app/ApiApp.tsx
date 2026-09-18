@@ -1,84 +1,341 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Advisory, Button, Card, EmptyState, Field, Modal, PageHeader, SelectInput, Status, TextArea, TextInput, Timeline } from '@/shared/ui'
-import { ApiError, endpoints, type ApiRole, type Application, type Posting, type Skill, uploadDocument } from '@/lib/api'
-import { useSession } from './session'
+import { type ApiRole } from "@/lib/api";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  TextInput,
+} from "@/shared/ui";
+import { useState, type FormEvent, type ReactNode } from "react";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  ApplicationPage,
+  ApplicationsPage,
+  ApplyPage,
+} from "../features/applications";
+import { AssessmentPage } from "../features/assessment";
+import { MonitoringPage } from "../features/monitoring";
+import {
+  NotificationsPage,
+  PlacementPage,
+  PlacementsPage,
+} from "../features/placements";
+import {
+  DiscoverPage,
+  NewPosting,
+  PostingDetail,
+  PostingsPage,
+} from "../features/postings";
+import { ProfilePage } from "../features/profile";
+import { ReportsPage } from "../features/report-list";
+import { ReportDetailPage } from "../features/reports";
+import { Loading } from "../features/view";
+import { useSession } from "./session";
 
-const labels: Record<ApiRole, string> = { STUDENT: 'Student', COMPANY_STAFF: 'Company Staff', SUPERVISOR: 'Supervisor', ADMIN: 'Admin' }
-const rolePath: Record<ApiRole, string> = { STUDENT: '/discover', COMPANY_STAFF: '/postings', SUPERVISOR: '/unavailable', ADMIN: '/monitoring' }
-const enabled = { profile: true, documents: true, discover: true, postings: true, applications: true, reports: true, assessments: true, monitoring: true, ai: true } as const
-export const tone = (value: string) => value.includes('REJECT') || value.includes('FAILED') ? 'red' as const : value.includes('OPEN') || value.includes('APPROVED') || value.includes('ACCEPTED') || value.includes('AVAILABLE') ? 'green' as const : 'amber' as const
-
-function ErrorMessage({ error }: { error: unknown }) { return <p className="notice" role="alert">{error instanceof ApiError ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.'}</p> }
-function Loading() { return <Card><p className="subtle">Đang tải…</p></Card> }
-function useData<T>(key: unknown[], fn: () => Promise<T>) { return useQuery({ queryKey: key, queryFn: fn, retry: (count, error) => !(error instanceof ApiError && [401, 403, 404].includes(error.status)) && count < 1 }) }
-function RequireRole({ roles, children }: { roles?: ApiRole[]; children?: ReactNode }) { const session = useSession(); const location = useLocation(); if (!session.ready) return <Loading />; if (!session.accessToken) return <Navigate to={`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`} replace />; if (roles && !roles.includes(session.activeRole)) return <Navigate to="/unavailable" replace />; return <>{children ?? <Outlet />}</> }
+const labels: Record<ApiRole, string> = {
+  STUDENT: "Student",
+  COMPANY_STAFF: "Company Staff",
+  SUPERVISOR: "Supervisor",
+  ADMIN: "Admin",
+};
+const rolePath: Record<ApiRole, string> = {
+  STUDENT: "/discover",
+  COMPANY_STAFF: "/postings",
+  SUPERVISOR: "/placements",
+  ADMIN: "/monitoring",
+};
+const enabled = {
+  profile: true,
+  documents: true,
+  discover: true,
+  postings: true,
+  applications: true,
+  reports: true,
+  assessments: true,
+  monitoring: true,
+  ai: false,
+} as const;
+function RequireRole({
+  roles,
+  children,
+}: {
+  roles?: ApiRole[];
+  children?: ReactNode;
+}) {
+  const session = useSession();
+  const location = useLocation();
+  if (!session.ready) return <Loading />;
+  if (!session.accessToken)
+    return (
+      <Navigate
+        to={`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+        replace
+      />
+    );
+  if (roles && !roles.includes(session.activeRole))
+    return <Navigate to="/unavailable" replace />;
+  return <>{children ?? <Outlet />}</>;
+}
 
 function Login() {
-  const { accessToken, signIn } = useSession(); const navigate = useNavigate(); const location = useLocation(); const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
-  if (accessToken) return <Navigate to="/" replace />
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); setError(''); try { await signIn(String(data.get('email')), String(data.get('password'))); navigate(new URLSearchParams(location.search).get('returnTo') || '/') } catch (reason) { setError(reason instanceof Error ? reason.message : 'Đăng nhập thất bại') } finally { setBusy(false) } }
-  return <main className="content" style={{ maxWidth: 520 }}><PageHeader title="Welcome to InternHub" description="Sign in to access your authorized internship workspace." /><Card><form onSubmit={submit}><Field label="Email" required><TextInput name="email" type="email" required autoComplete="email" /></Field><Field label="Password" required><TextInput name="password" type="password" required autoComplete="current-password" /></Field>{error && <p className="notice" role="alert">{error}</p>}<Button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button></form></Card></main>
+  const { accessToken, signIn } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (accessToken) return <Navigate to="/" replace />;
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      await signIn(String(data.get("email")), String(data.get("password")));
+      navigate(new URLSearchParams(location.search).get("returnTo") || "/");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="content" style={{ maxWidth: 520 }}>
+      <PageHeader
+        title="Welcome to InternHub"
+        description="Sign in to access your authorized internship workspace."
+      />
+      <Card>
+        <form onSubmit={submit}>
+          <Field label="Email" required>
+            <TextInput
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+            />
+          </Field>
+          <Field label="Password" required>
+            <TextInput
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+            />
+          </Field>
+          {error && (
+            <p className="notice" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+      </Card>
+    </main>
+  );
 }
 
 function Shell() {
-  const { activeRole, user, changeRole, signOut } = useSession(); const navigate = useNavigate(); const location = useLocation()
-  const links = activeRole === 'STUDENT' ? [['/discover', 'Discover'], ['/applications', 'Applications'], ['/profile', 'Profile']] : activeRole === 'COMPANY_STAFF' ? [['/postings', 'Postings'], ['/applications', 'Applications']] : activeRole === 'ADMIN' ? [['/monitoring', 'Monitoring'], ['/postings', 'Postings'], ['/applications', 'Applications']] : []
-  return <div className="app"><header className="topbar"><div className="header-inner"><Link className="brand" to="/"><span>✦</span>InternHub</Link><nav className="header-nav" aria-label="Primary navigation">{links.map(([to, label]) => <Link key={to} className={`nav-link ${location.pathname.startsWith(to) ? 'active' : ''}`} to={to}>{label}</Link>)}</nav><div className="header-actions"><label className="role-switch"><span className="sr-only">Active role</span><select value={activeRole} onChange={async event => { await changeRole(event.target.value as ApiRole); navigate(rolePath[event.target.value as ApiRole]) }}>{user.roles.map(role => <option key={role} value={role}>{labels[role]}</option>)}</select></label><button className="account-button" aria-label="Sign out" onClick={() => void signOut()}>{user.fullName.slice(0, 2).toUpperCase()} ⌄</button></div></div></header><main className="content"><Outlet /></main></div>
+  const { activeRole, user, changeRole, signOut } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const roleLinks =
+    activeRole === "STUDENT"
+      ? [
+          ["/discover", "Discover"],
+          ["/applications", "Applications"],
+          ["/profile", "Profile"],
+        ]
+      : activeRole === "COMPANY_STAFF"
+        ? [
+            ["/postings", "Postings"],
+            ["/applications", "Applications"],
+          ]
+        : activeRole === "ADMIN"
+          ? [
+              ["/monitoring", "Monitoring"],
+              ["/postings", "Postings"],
+              ["/applications", "Applications"],
+            ]
+          : [];
+  const links = [
+    ...roleLinks,
+    ["/placements", "Placements"],
+    ["/notifications", "Notifications"],
+  ];
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="header-inner">
+          <Link className="brand" to="/">
+            <span>✦</span>InternHub
+          </Link>
+          <nav className="header-nav" aria-label="Primary navigation">
+            {links.map(([to, label]) => (
+              <Link
+                key={to}
+                className={`nav-link ${
+                  location.pathname.startsWith(to) ? "active" : ""
+                }`}
+                to={to}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="header-actions">
+            <label className="role-switch">
+              <span className="sr-only">Active role</span>
+              <select
+                value={activeRole}
+                onChange={async (event) => {
+                  await changeRole(event.target.value as ApiRole);
+                  navigate(rolePath[event.target.value as ApiRole]);
+                }}
+              >
+                {user.roles.map((role) => (
+                  <option key={role} value={role}>
+                    {labels[role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="account-button"
+              aria-label="Sign out"
+              onClick={() => void signOut()}
+            >
+              {user.fullName.slice(0, 2).toUpperCase()} ⌄
+            </button>
+          </div>
+        </div>
+      </header>
+      <main className="content">
+        <Outlet />
+      </main>
+    </div>
+  );
 }
 
-function ProfilePage() {
-  const client = useQueryClient(); const profile = useData(['profile'], endpoints.profile); const skills = useData(['skills'], endpoints.skills); const preferences = useData(['preferences'], endpoints.preferences); const documents = useData(['documents'], endpoints.documents); const [notice, setNotice] = useState('')
-  const save = useMutation({ mutationFn: async (form: HTMLFormElement) => { const data = new FormData(form); await endpoints.updateProfile({ university: String(data.get('university')), major: String(data.get('major')), graduationYear: Number(data.get('graduationYear')) || undefined, bio: String(data.get('bio')) }); await endpoints.setPreferences({ industries: split(String(data.get('industries'))), locations: split(String(data.get('locations'))), workArrangements: split(String(data.get('workArrangements'))), minDurationWeeks: numberValue(data.get('minDurationWeeks')), maxDurationWeeks: numberValue(data.get('maxDurationWeeks')) }) }, onSuccess: () => { void client.invalidateQueries({ queryKey: ['profile'] }); void client.invalidateQueries({ queryKey: ['preferences'] }); setNotice('Profile saved.') } })
-  const upload = useMutation({ mutationFn: async (file: File) => { validateFile(file); return uploadDocument(file) }, onSuccess: () => void client.invalidateQueries({ queryKey: ['documents'] }) })
-  const remove = useMutation({ mutationFn: endpoints.deleteDocument, onSuccess: () => void client.invalidateQueries({ queryKey: ['documents'] }) })
-  if (profile.isLoading || skills.isLoading || preferences.isLoading || documents.isLoading) return <Loading />; if (profile.error || skills.error || preferences.error || documents.error) return <ErrorMessage error={profile.error ?? skills.error ?? preferences.error ?? documents.error} />
-  const p = profile.data!, pref = preferences.data!, currentSkills = skills.data!
-  return <><PageHeader title="Student profile" description="Maintain profile, skills, preferences and reusable documents." /><Card><form onSubmit={event => { event.preventDefault(); save.mutate(event.currentTarget) }}><div className="form-grid"><Field label="University"><TextInput name="university" defaultValue={p.university} /></Field><Field label="Major"><TextInput name="major" defaultValue={p.major} /></Field><Field label="Graduation year"><TextInput name="graduationYear" type="number" defaultValue={p.graduationYear} /></Field><Field label="Industries (comma separated)"><TextInput name="industries" defaultValue={pref.industries.join(', ')} /></Field><Field label="Locations (comma separated)"><TextInput name="locations" defaultValue={pref.locations.join(', ')} /></Field><Field label="Work arrangements (comma separated)"><TextInput name="workArrangements" defaultValue={pref.workArrangements.join(', ')} /></Field><Field label="Minimum duration (weeks)"><TextInput name="minDurationWeeks" type="number" defaultValue={pref.minDurationWeeks} /></Field><Field label="Maximum duration (weeks)"><TextInput name="maxDurationWeeks" type="number" defaultValue={pref.maxDurationWeeks} /></Field></div><Field label="Bio"><TextArea name="bio" defaultValue={p.bio} /></Field>{notice && <p className="subtle">{notice}</p>}<Button type="submit" disabled={save.isPending}>{save.isPending ? 'Saving…' : 'Save profile'}</Button></form></Card><Card style={{ marginTop: 20 }}><h2 className="section-title">Skills</h2><SkillEditor skills={currentSkills} onSave={async next => { await endpoints.setSkills(next); await client.invalidateQueries({ queryKey: ['skills'] }) }} /></Card><Card style={{ marginTop: 20 }}><h2 className="section-title">Documents</h2><Field label="Upload document" hint="PDF, JPEG, PNG or DOCX; maximum 10 MiB."><TextInput type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) upload.mutate(file) }} /></Field>{upload.error && <ErrorMessage error={upload.error} />}{documents.data!.items.map(doc => <div className="file-row" key={doc.id}><strong>{doc.originalName}</strong><Status tone={tone(doc.state)}>{doc.state}</Status><Button variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate(doc.id)}>Delete</Button></div>)}{!documents.data!.items.length && <p className="subtle">No documents uploaded.</p>}</Card></>
+function Unavailable() {
+  return (
+    <EmptyState
+      title="Feature not available"
+      text="This workflow is deferred because the running API does not currently expose the required endpoint."
+      action={
+        <Link className="button primary" to="/">
+          Return home
+        </Link>
+      }
+    />
+  );
+}
+function Home() {
+  const { activeRole } = useSession();
+  return <Navigate to={rolePath[activeRole]} replace />;
 }
 
-function SkillEditor({ skills, onSave }: { skills: Skill[]; onSave: (skills: Skill[]) => Promise<void> }) { const [value, setValue] = useState(skills.map(skill => `${skill.name}|${skill.proficiency ?? 'DEVELOPING'}`).join('\n')); const [busy, setBusy] = useState(false); const submit = async () => { setBusy(true); try { await onSave(value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [name, proficiency = 'DEVELOPING'] = line.split('|'); return { name: name.trim(), proficiency: proficiency.trim().toUpperCase() } })) } finally { setBusy(false) } }; return <><TextArea aria-label="Skills" value={value} onChange={event => setValue(event.target.value)} placeholder="React | PROFICIENT" /><p className="subtle">One skill per line: name | proficiency.</p><Button onClick={() => void submit()} disabled={busy}>{busy ? 'Saving…' : 'Save skills'}</Button></> }
-
-function DiscoverPage() {
-  const { activeRole } = useSession(); const query = useData(['postings', activeRole], endpoints.postings); const [search, setSearch] = useState(''); const [sort, setSort] = useState('score'); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />
-  const items = [...query.data!].filter(item => item.status === 'OPEN').filter(item => `${item.title} ${item.description} ${item.skills.map(skill => skill.name).join(' ')}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sort === 'score' ? (b.match?.score ?? 0) - (a.match?.score ?? 0) : a.title.localeCompare(b.title))
-  return <><PageHeader title="Discover opportunities" description="Search available internships. Match scores are advisory only." /><Card className="search-hub"><div className="filterbar"><TextInput aria-label="Search postings" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search role, company, skills" /><SelectInput value={sort} onChange={event => setSort(event.target.value)}><option value="score">Match score</option><option value="title">Title</option></SelectInput></div></Card><div className="grid three" style={{ marginTop: 20 }}>{items.map(posting => <PostingCard key={posting.id} posting={posting} />)}</div>{!items.length && <EmptyState title="No opportunities found" text="Try a different search." />}</>
+export default function ApiApp() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route element={<RequireRole />}>
+        <Route element={<Shell />}>
+          <Route index element={<Home />} />
+          <Route
+            path="discover"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <DiscoverPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="profile"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <ProfilePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="postings"
+            element={
+              <RequireRole roles={["COMPANY_STAFF", "ADMIN"]}>
+                <PostingsPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="postings/new"
+            element={
+              <RequireRole roles={["COMPANY_STAFF", "ADMIN"]}>
+                <NewPosting />
+              </RequireRole>
+            }
+          />
+          <Route path="postings/:postingId" element={<PostingDetail />} />
+          <Route
+            path="postings/:postingId/apply"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <ApplyPage />
+              </RequireRole>
+            }
+          />
+          <Route path="applications" element={<ApplicationsPage />} />
+          <Route
+            path="applications/:applicationId"
+            element={<ApplicationPage />}
+          />
+          <Route
+            path="placements/:placementId/reports/*"
+            element={<ReportsPage />}
+          />
+          <Route path="reports/:reportId" element={<ReportDetailPage />} />
+          <Route path="placements" element={<PlacementsPage />} />
+          <Route path="placements/:placementId" element={<PlacementPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route
+            path="placements/:placementId/self-assessment"
+            element={
+              <RequireRole roles={["STUDENT"]}>
+                <AssessmentPage kind="self" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="placements/:placementId/performance-evaluation"
+            element={
+              <RequireRole roles={["SUPERVISOR", "ADMIN"]}>
+                <AssessmentPage kind="performance" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="monitoring"
+            element={
+              <RequireRole roles={["ADMIN"]}>
+                <MonitoringPage />
+              </RequireRole>
+            }
+          />
+          <Route path="unavailable" element={<Unavailable />} />
+          <Route path="*" element={<Unavailable />} />
+        </Route>
+      </Route>
+    </Routes>
+  );
 }
-function PostingCard({ posting }: { posting: Posting }) { return <Card className="opportunity-card"><div className="record-head"><div><h2 className="section-title">{posting.title}</h2><p className="subtle">{posting.location ?? 'Location not listed'} · {posting.workArrangement}</p></div>{posting.match && <Status tone="blue">Match {posting.match.score}</Status>}</div><p className="subtle">{posting.durationWeeks} weeks · {posting.openings} openings · Deadline {posting.applicationDeadline}</p><div className="tags">{posting.skills.map(skill => <span className="tag" key={skill.id}>{skill.name}</span>)}</div><div className="form-actions"><Link className="button primary" to={`/postings/${posting.id}`}>View posting</Link></div></Card> }
 
-function PostingDetail() { const { postingId = '' } = useParams(); const { activeRole } = useSession(); const query = useData(['posting', postingId, activeRole], () => endpoints.posting(postingId)); const navigate = useNavigate(); const ai = useAi(postingId ? { kind: 'MATCH_EXPLANATION', postingId } : null); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; const posting = query.data!; return <><PageHeader title={posting.title} description={`${posting.location ?? ''} · ${posting.workArrangement}`} action={activeRole === 'STUDENT' && posting.status === 'OPEN' ? <Button onClick={() => navigate(`/postings/${posting.id}/apply`)}>Apply</Button> : undefined} /><div className="grid two"><Card><p>{posting.description}</p><h2 className="section-title">Requirements</h2><div className="tags">{posting.skills.map(skill => <span className="tag" key={skill.id}>{skill.importance}: {skill.name}</span>)}</div></Card><div className="stack">{posting.match && <Card><h2 className="section-title">Match score</h2><strong className="score-value">{posting.match.score}</strong><p className="subtle">Matched: {posting.match.matchedSkills.join(', ') || 'None'}</p><p className="subtle">Missing: {posting.match.missingSkills.join(', ') || 'None'}</p></Card>}<AiPanel ai={ai} /></div></div></> }
-
-function PostingsPage() { const { activeRole } = useSession(); const query = useData(['postings', activeRole], endpoints.postings); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; return <><PageHeader title="Postings" description="Only draft creation is available with the current API." action={<Link className="button primary" to="/postings/new">Create draft</Link>} /><PostingTable postings={query.data!} /></> }
-function PostingTable({ postings }: { postings: Posting[] }) { return <Card><div className="table-wrap"><table className="table"><thead><tr><th>Posting</th><th>Status</th><th>Deadline</th><th /></tr></thead><tbody>{postings.map(posting => <tr key={posting.id}><td><strong>{posting.title}</strong><br /><small>{posting.location}</small></td><td><Status tone={tone(posting.status)}>{posting.status}</Status></td><td>{posting.applicationDeadline}</td><td><Link to={`/postings/${posting.id}`}>Open</Link></td></tr>)}</tbody></table></div></Card> }
-function NewPosting() { const client = useQueryClient(); const navigate = useNavigate(); const [error, setError] = useState(''); const create = useMutation({ mutationFn: endpoints.createPosting, onSuccess: posting => { void client.invalidateQueries({ queryKey: ['postings'] }); navigate(`/postings/${posting.id}`) }, onError: reason => setError(reason instanceof Error ? reason.message : 'Unable to create posting') }); const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); const skills = split(String(data.get('skills'))).map(name => ({ name, importance: 'REQUIRED' })); create.mutate({ companyId: String(data.get('companyId')), title: String(data.get('title')), description: String(data.get('description')), category: String(data.get('category')) || undefined, location: String(data.get('location')) || undefined, workArrangement: String(data.get('workArrangement')), durationWeeks: Number(data.get('durationWeeks')), openings: Number(data.get('openings')), applicationDeadline: String(data.get('applicationDeadline')), deadlineTimezone: 'Asia/Ho_Chi_Minh', skills }) }; return <><PageHeader title="Create posting draft" description="Publishing and lifecycle changes await backend support." /><Card><form onSubmit={submit}><Field label="Company ID" required><TextInput name="companyId" required /></Field><div className="form-grid"><Field label="Title" required><TextInput name="title" required /></Field><Field label="Category"><TextInput name="category" /></Field><Field label="Location"><TextInput name="location" /></Field><Field label="Work arrangement" required><SelectInput name="workArrangement"><option>HYBRID</option><option>REMOTE</option><option>ONSITE</option></SelectInput></Field><Field label="Duration weeks" required><TextInput name="durationWeeks" type="number" min="1" required /></Field><Field label="Openings" required><TextInput name="openings" type="number" min="1" required /></Field><Field label="Deadline" required><TextInput name="applicationDeadline" type="date" required /></Field></div><Field label="Description" required><TextArea name="description" required /></Field><Field label="Required skills"><TextInput name="skills" placeholder="React, TypeScript" /></Field>{error && <p className="notice">{error}</p>}<Button type="submit" disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create draft'}</Button></form></Card></> }
-
-function ApplyPage() { const { postingId = '' } = useParams(); const navigate = useNavigate(); const documents = useData(['documents'], endpoints.documents); const [error, setError] = useState(''); const submit = useMutation({ mutationFn: endpoints.apply, onSuccess: application => navigate(`/applications/${application.id}`), onError: reason => setError(reason instanceof Error ? reason.message : 'Unable to submit application') }); if (documents.isLoading) return <Loading />; if (documents.error) return <ErrorMessage error={documents.error} />; const available = documents.data!.items.filter(document => document.state === 'AVAILABLE'); const onSubmit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); submit.mutate({ postingId, contactName: String(data.get('contactName')), contactEmail: String(data.get('contactEmail')), university: String(data.get('university')), major: String(data.get('major')), availability: String(data.get('availability')), coverNote: String(data.get('coverNote')), cvDocumentId: String(data.get('cvDocumentId')), supportingDocumentIds: data.getAll('supportingDocumentIds') }) }; return <><PageHeader title="Apply to opportunity" description="A CV and complete profile snapshot are required." /><Card><form onSubmit={onSubmit}><div className="form-grid"><Field label="Contact name" required><TextInput name="contactName" required /></Field><Field label="Contact email" required><TextInput name="contactEmail" type="email" required /></Field><Field label="University" required><TextInput name="university" required /></Field><Field label="Major" required><TextInput name="major" required /></Field><Field label="Availability" required><TextInput name="availability" required /></Field><Field label="CV" required><SelectInput name="cvDocumentId" required defaultValue=""><option value="" disabled>Select an uploaded document</option>{available.map(document => <option value={document.id} key={document.id}>{document.originalName}</option>)}</SelectInput></Field></div><Field label="Cover note" required><TextArea name="coverNote" required /></Field>{error && <p className="notice">{error}</p>}<Button type="submit" disabled={submit.isPending || !available.length}>{submit.isPending ? 'Submitting…' : 'Submit application'}</Button></form></Card></> }
-
-function ApplicationsPage() { const { activeRole } = useSession(); const query = useData(['applications', activeRole], endpoints.applications); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; return <><PageHeader title={activeRole === 'STUDENT' ? 'My applications' : 'Applications'} description="Only API-supported application actions are available." /><Card><div className="table-wrap"><table className="table"><thead><tr><th>ID</th><th>Status</th><th>Submitted</th><th /></tr></thead><tbody>{query.data!.map(application => <tr key={application.id}><td><strong>{application.id.slice(0, 8)}</strong></td><td><Status tone={tone(application.status)}>{application.status}</Status></td><td>{formatDate(application.submittedAt)}</td><td><Link to={`/applications/${application.id}`}>Open</Link></td></tr>)}</tbody></table></div>{!query.data!.length && <p className="subtle">No applications found.</p>}</Card></> }
-
-function ApplicationPage() { const { applicationId = '' } = useParams(); const { activeRole } = useSession(); const query = useData(['application', applicationId, activeRole], () => endpoints.application(applicationId)); const [accepting, setAccepting] = useState(false); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; const application = query.data!; return <><PageHeader title="Application detail" description={`Status: ${application.status}`} /><div className="grid two"><Card><h2 className="section-title">Submitted application</h2><p><strong>{application.contactName}</strong><br />{application.contactEmail}<br />{application.university} · {application.major}</p><p>{application.coverNote}</p><h2 className="section-title">Status history</h2><Timeline items={(application.history ?? []).map(item => ({ title: item.toStatus, meta: `${item.actorUserId} · ${formatDate(item.changedAt)}`, note: item.note }))} /></Card><Card><Status tone={tone(application.status)}>{application.status}</Status>{['COMPANY_STAFF', 'ADMIN'].includes(activeRole) && application.status === 'INTERVIEW' && <div style={{ marginTop: 16 }}><Button onClick={() => setAccepting(true)}>Accept and create placement</Button></div>}<p className="subtle" style={{ marginTop: 16 }}>Transitions other than acceptance await backend support.</p></Card></div>{accepting && <AcceptModal application={application} onClose={() => setAccepting(false)} />}</> }
-function AcceptModal({ application, onClose }: { application: Application; onClose: () => void }) { const navigate = useNavigate(); const supervisors = useData(['supervisors', application.id], () => endpoints.supervisors(application.id)); const accept = useMutation({ mutationFn: (body: { supervisorUserId: string; startDate: string; endDate: string; note?: string }) => endpoints.accept(application.id, { status: 'ACCEPTED', ...body }), onSuccess: result => navigate(`/placements/${result.placement.id}/reports`) }); if (supervisors.isLoading) return <Modal title="Accept application" onClose={onClose}><p>Loading supervisors…</p></Modal>; const list = Array.isArray(supervisors.data) ? supervisors.data : supervisors.data?.items ?? []; return <Modal title="Accept application" onClose={onClose}><form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); accept.mutate({ supervisorUserId: String(data.get('supervisorUserId')), startDate: String(data.get('startDate')), endDate: String(data.get('endDate')), note: String(data.get('note')) || undefined }) }}><Field label="Supervisor" required><SelectInput name="supervisorUserId" required>{list.map(supervisor => <option key={supervisor.id} value={supervisor.id}>{supervisor.fullName ?? supervisor.email ?? supervisor.id}</option>)}</SelectInput></Field><Field label="Start date" required><TextInput name="startDate" type="date" required /></Field><Field label="End date" required><TextInput name="endDate" type="date" required /></Field><Field label="Note"><TextArea name="note" /></Field>{accept.error && <ErrorMessage error={accept.error} />}<Button type="submit" disabled={accept.isPending || !list.length}>Accept</Button></form></Modal> }
-
-function ReportsPage() { const { placementId = '' } = useParams(); const { activeRole } = useSession(); const periods = useData(['periods', placementId], () => endpoints.periods(placementId)); const reports = useData(['reports', placementId], () => endpoints.reports(placementId)); const navigate = useNavigate(); if (periods.isLoading || reports.isLoading) return <Loading />; if (periods.error || reports.error) return <ErrorMessage error={periods.error ?? reports.error} />; const byPeriod = new Map(reports.data!.map(report => [report.reportingPeriodId, report])); return <><PageHeader title="Weekly reports" description="Available when opened with an authorized placement ID." /><Card><div className="table-wrap"><table className="table"><thead><tr><th>Week</th><th>Due</th><th>State</th><th /></tr></thead><tbody>{periods.data!.map(period => { const report = byPeriod.get(period.id); return <tr key={period.id}><td>{period.weekStart} — {period.weekEnd}</td><td>{formatDate(period.dueAt)}</td><td><Status tone={tone(report?.state ?? 'DRAFT')}>{report?.state ?? 'NOT STARTED'}</Status></td><td>{report ? <Link to={`/reports/${report.id}`}>Open</Link> : activeRole === 'STUDENT' ? <Button variant="ghost" onClick={() => navigate(`/placements/${placementId}/reports/new?period=${period.id}`)}>Start</Button> : null}</td></tr> })}</tbody></table></div></Card><Routes><Route path="new" element={<ReportEditor placementId={placementId} />} /></Routes></> }
-function ReportEditor({ placementId }: { placementId: string }) { const navigate = useNavigate(); const period = new URLSearchParams(useLocation().search).get('period') ?? ''; const create = useMutation({ mutationFn: (body: Record<string, unknown>) => endpoints.createReport(placementId, body), onSuccess: report => navigate(`/reports/${report.id}`) }); return <Card style={{ marginTop: 20 }}><form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); create.mutate({ reportingPeriodId: period, accomplishments: String(data.get('accomplishments')), challenges: String(data.get('challenges')), nextWeekPlan: String(data.get('nextWeekPlan')), attachmentIds: [] }) }}><h2 className="section-title">New weekly report</h2><Field label="Accomplishments" required><TextArea name="accomplishments" required /></Field><Field label="Challenges" required><TextArea name="challenges" required /></Field><Field label="Next-week plan" required><TextArea name="nextWeekPlan" required /></Field>{create.error && <ErrorMessage error={create.error} />}<Button type="submit" disabled={create.isPending}>Save draft</Button></form></Card> }
-
-function ReportPage() { const { reportId = '' } = useParams(); const { activeRole } = useSession(); const client = useQueryClient(); const query = useData(['report', reportId, activeRole], () => endpoints.report(reportId)); const submit = useMutation({ mutationFn: () => endpoints.submitReport(reportId), onSuccess: () => void client.invalidateQueries({ queryKey: ['report', reportId] }) }); const review = useMutation({ mutationFn: (outcome: string) => endpoints.reviewReport(reportId, { reportVersionId: query.data?.versions?.at(-1)?.id, outcome, feedback: outcome === 'REVISION_REQUESTED' ? 'Please revise the submitted report.' : undefined }), onSuccess: () => void client.invalidateQueries({ queryKey: ['report', reportId] }) }); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; const report = query.data!; const version = report.versions?.at(-1); return <><PageHeader title="Weekly report" description={`State: ${report.state}`} /><div className="grid two"><Card>{version ? <><h2 className="section-title">Version {version.versionNo}</h2><h3>Accomplishments</h3><p>{version.accomplishments}</p><h3>Challenges</h3><p>{version.challenges}</p><h3>Next week</h3><p>{version.nextWeekPlan}</p></> : <p className="subtle">Draft has no submitted version.</p>}</Card><Card><Status tone={tone(report.state)}>{report.state}</Status>{activeRole === 'STUDENT' && ['DRAFT', 'REVISION_REQUESTED'].includes(report.state) && <div style={{ marginTop: 16 }}><Button onClick={() => submit.mutate()}>Submit report</Button></div>}{['SUPERVISOR', 'ADMIN'].includes(activeRole) && report.state === 'SUBMITTED' && <div className="form-actions" style={{ marginTop: 16 }}><Button onClick={() => review.mutate('APPROVED')}>Approve</Button><Button variant="secondary" onClick={() => review.mutate('REVISION_REQUESTED')}>Request revision</Button></div>}<Timeline items={(report.reviews ?? []).map(item => ({ title: item.outcome, meta: formatDate(item.reviewedAt), note: item.feedback }))} /></Card></div></> }
-
-function AssessmentPage({ kind }: { kind: 'self' | 'performance' }) { const { placementId = '' } = useParams(); const { activeRole } = useSession(); const query = useData(['assessment', kind, placementId, activeRole], () => kind === 'self' ? endpoints.selfAssessment(placementId) : endpoints.performanceEvaluation(placementId)); const save = useMutation({ mutationFn: (body: Record<string, unknown>) => kind === 'self' ? endpoints.putSelfAssessment(placementId, body) : endpoints.putPerformanceEvaluation(placementId, body) }); const data = query.data ?? {}; const submit = (event: FormEvent<HTMLFormElement>, status: 'DRAFT' | 'SUBMITTED') => { event.preventDefault(); const form = new FormData(event.currentTarget); const ratings = { technicalPractice: Number(form.get('technicalPractice')), communication: Number(form.get('communication')) }; save.mutate(kind === 'self' ? { status, ratings, reflection: String(form.get('reflection')), learningOutcomes: String(form.get('learningOutcomes')) } : { status, ratings, comments: String(form.get('comments')), completionDecision: String(form.get('completionDecision')) }) }; if (query.isLoading) return <Loading />; if (query.error && !(query.error instanceof ApiError && query.error.status === 404)) return <ErrorMessage error={query.error} />; return <><PageHeader title={kind === 'self' ? 'Self-assessment' : 'Performance evaluation'} description="Assessments are separate authored records." /><Card><form onSubmit={event => submit(event, 'SUBMITTED')}><div className="form-grid"><Field label="Technical practice" required><SelectInput name="technicalPractice" defaultValue={String((data.ratings as Record<string, number> | undefined)?.technicalPractice ?? 3)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></SelectInput></Field><Field label="Communication" required><SelectInput name="communication" defaultValue={String((data.ratings as Record<string, number> | undefined)?.communication ?? 3)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></SelectInput></Field></div>{kind === 'self' ? <><Field label="Reflection" required><TextArea name="reflection" defaultValue={String(data.reflection ?? '')} required /></Field><Field label="Learning outcomes" required><TextArea name="learningOutcomes" defaultValue={String(data.learningOutcomes ?? '')} required /></Field></> : <><Field label="Completion decision" required><SelectInput name="completionDecision" defaultValue={String(data.completionDecision ?? 'PENDING')}><option>PENDING</option><option>PASSED</option><option>FAILED</option><option>INCOMPLETE</option></SelectInput></Field><Field label="Evaluator feedback"><TextArea name="comments" defaultValue={String(data.comments ?? '')} /></Field></>} {save.error && <ErrorMessage error={save.error} />}<div className="form-actions"><Button variant="secondary" onClick={event => { const form = event.currentTarget.closest('form'); if (form) submit({ preventDefault: () => undefined, currentTarget: form } as unknown as FormEvent<HTMLFormElement>, 'DRAFT') }}>Save draft</Button><Button type="submit" disabled={save.isPending}>Submit</Button></div></form></Card></> }
-
-function MonitoringPage() { const location = useLocation(); const query = useData(['monitoring', location.search], () => endpoints.monitoring(location.search.slice(1))); if (query.isLoading) return <Loading />; if (query.error) return <ErrorMessage error={query.error} />; const data = query.data!; return <><PageHeader title="Monitoring" description="Read-only program and term overview." /><div className="grid three"><Metric label="Applications" value={sum(data.applications)} /><Metric label="Placements" value={sum(data.placements)} /><Metric label="Reports" value={sum(data.reports)} /></div><Card style={{ marginTop: 20 }}><h2 className="section-title">Upcoming deadlines</h2><Timeline items={Array.isArray(data.deadlines) ? (data.deadlines as Array<{ kind: string; dueAt: string }>).map(item => ({ title: item.kind, meta: formatDate(item.dueAt) })) : []} /></Card><Card style={{ marginTop: 20 }}><h2 className="section-title">Recent activity</h2><Timeline items={Array.isArray(data.recentActivity) ? (data.recentActivity as Array<{ type: string; occurredAt: string }>).map(item => ({ title: item.type, meta: formatDate(item.occurredAt) })) : []} /></Card></> }
-function Metric({ label, value }: { label: string; value: number }) { return <Card className="metric"><strong>{value}</strong><span>{label}</span></Card> }
-
-function useAi(input: Record<string, string> | null) { const [jobId, setJobId] = useState(''); const create = useMutation({ mutationFn: () => endpoints.createAiJob(input ?? {}) , onSuccess: job => setJobId(job.id) }); const job = useQuery({ queryKey: ['ai-job', jobId], queryFn: () => endpoints.aiJob(jobId), enabled: Boolean(jobId), refetchInterval: query => ['PENDING', 'PROCESSING'].includes(query.state.data?.status ?? '') ? 1500 : false, retry: false }); return { request: () => create.mutate(), loading: create.isPending || job.isFetching, data: job.data, error: create.error ?? job.error } }
-function AiPanel({ ai }: { ai: ReturnType<typeof useAi> }) { if (!enabled.ai) return null; return <Advisory onRefresh={ai.request}>{ai.loading ? <p>Generating advisory assistance…</p> : ai.data?.status === 'SUCCEEDED' ? <p>{ai.data.generatedContent}</p> : ai.data?.status === 'FAILED' ? <p>Generated assistance is unavailable. Source data remains available.</p> : <p>Request an explanation based on the existing source record.</p>}{ai.error && <p>Unable to request generated assistance.</p>}</Advisory> }
-
-function Unavailable() { return <EmptyState title="Feature not available" text="This workflow is deferred because the running API does not currently expose the required endpoint." action={<Link className="button primary" to="/">Return home</Link>} /> }
-function Home() { const { activeRole } = useSession(); return <Navigate to={rolePath[activeRole]} replace /> }
-export function split(value: string) { return value.split(',').map(item => item.trim()).filter(Boolean) }
-export function numberValue(value: FormDataEntryValue | null) { const parsed = Number(value); return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined }
-export function formatDate(value?: string) { return value ? new Date(value).toLocaleString() : '—' }
-export function sum(value: unknown) { return value && typeof value === 'object' ? Object.values(value as Record<string, unknown>).reduce<number>((total, item) => total + (typeof item === 'number' ? item : 0), 0) : 0 }
-export function validateFile(file: File) { const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']; if (file.size > 10 * 1024 * 1024) throw new Error('File must be 10 MiB or smaller'); if (file.type && !allowed.includes(file.type)) throw new Error('Only PDF, JPEG, PNG, and DOCX files are allowed') }
-
-export default function ApiApp() { return <Routes><Route path="/login" element={<Login />} /><Route element={<RequireRole />}><Route element={<Shell />}><Route index element={<Home />} /><Route path="discover" element={<RequireRole roles={['STUDENT']}><DiscoverPage /></RequireRole>} /><Route path="profile" element={<RequireRole roles={['STUDENT']}><ProfilePage /></RequireRole>} /><Route path="postings" element={<RequireRole roles={['COMPANY_STAFF', 'ADMIN']}><PostingsPage /></RequireRole>} /><Route path="postings/new" element={<RequireRole roles={['COMPANY_STAFF', 'ADMIN']}><NewPosting /></RequireRole>} /><Route path="postings/:postingId" element={<PostingDetail />} /><Route path="postings/:postingId/apply" element={<RequireRole roles={['STUDENT']}><ApplyPage /></RequireRole>} /><Route path="applications" element={<ApplicationsPage />} /><Route path="applications/:applicationId" element={<ApplicationPage />} /><Route path="placements/:placementId/reports/*" element={<ReportsPage />} /><Route path="reports/:reportId" element={<ReportPage />} /><Route path="placements/:placementId/self-assessment" element={<RequireRole roles={['STUDENT']}><AssessmentPage kind="self" /></RequireRole>} /><Route path="placements/:placementId/performance-evaluation" element={<RequireRole roles={['SUPERVISOR', 'ADMIN']}><AssessmentPage kind="performance" /></RequireRole>} /><Route path="monitoring" element={<RequireRole roles={['ADMIN']}><MonitoringPage /></RequireRole>} /><Route path="unavailable" element={<Unavailable />} /><Route path="*" element={<Unavailable />} /></Route></Route></Routes> }
+export { numberValue, split, sum, tone, validateFile } from "../features/view";
