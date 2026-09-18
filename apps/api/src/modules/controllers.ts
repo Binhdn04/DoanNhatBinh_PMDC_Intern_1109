@@ -1,47 +1,162 @@
-import { Body, BadRequestException, ConflictException, Controller, Get, NotFoundException, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import * as bcrypt from 'bcrypt';
-import { DataSource, In, Repository } from 'typeorm';
-import { Application, ApplicationDocument, ApplicationHistory, AuthSession, Company, CompanyStaff, Document, Notification, Placement, Posting, PostingSkill, ReportingPeriod, SavedPosting, Skill, StudentPreference, StudentProfile, StudentSkill, SupervisorAssignment, SupervisorProfile, Task, User, UserRole } from '../infrastructure/database/entities';
-import { normalizeCanonicalSkill } from '../infrastructure/database/canonical-backfill';
-import { reportingPeriods } from './calendar';
-import { assert, CurrentUser, Principal, Public, Roles, SessionGuard } from './auth';
-import { calculateMatchScore } from './core-domain';
-import { SchedulerHealthService } from './scheduler-health.service';
-
-@Controller('auth') export class AuthController {
-  constructor(@InjectRepository(User) private users: Repository<User>, @InjectRepository(UserRole) private roles: Repository<UserRole>, @InjectRepository(AuthSession) private sessions: Repository<AuthSession>, private jwt: JwtService) {}
-  private async issue(user: User, session: AuthSession) { const roles=(await this.roles.findBy({userId:user.id})).map(x=>x.role); return {accessToken:await this.jwt.signAsync({id:user.id,sid:session.id,role:session.activeRole,version:session.version,roles}),tokenType:'Bearer',user:{id:user.id,email:user.email,fullName:user.fullName,roles},activeRole:session.activeRole}; }
-  @Post('sign-in') @Public() async signIn(@Body() body:any) { const user=await this.users.findOneBy({email:body.email?.trim().toLowerCase()}); if(!user||!await bcrypt.compare(body.password??'',user.passwordHash))throw new BadRequestException('Invalid email or password'); const roles=(await this.roles.findBy({userId:user.id})).map(x=>x.role); const activeRole=body.activeRole??roles[0]; if(!roles.includes(activeRole))throw new BadRequestException('Role is not assigned'); return this.issue(user,await this.sessions.save({userId:user.id,activeRole,version:1,expiresAt:new Date(Date.now()+604800000)})); }
-  @Post('sign-out') @UseGuards(SessionGuard) async signOut(@CurrentUser() p:Principal){await this.sessions.update(p.sid,{revokedAt:new Date()});return {ok:true};}
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { ApplicationsService } from "./applications.service";
+import { CurrentUser, Principal, Public, Roles, SessionGuard } from "./auth";
+import { AuthService } from "./auth.service";
+import {
+  ApplicationDto,
+  PageDto,
+  PostingDto,
+  PostingQueryDto,
+  PreferencesDto,
+  ProfileDto,
+  RoleDto,
+  SignInDto,
+  SkillsDto,
+  TransitionDto,
+} from "./dto";
+import { IdentityService } from "./identity.service";
+import { PostingsService } from "./postings.service";
+import { ProfilesService } from "./profiles.service";
+@Controller("auth")
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+  @Post("sign-in") @Public() async signIn(
+    @Body() body: SignInDto,
+    @Req() req?: { ip?: string },
+  ) {
+    return this.authService.signIn(body, req);
+  }
+  @Post("sign-out") @UseGuards(SessionGuard) async signOut(
+    @CurrentUser() p: Principal,
+  ) {
+    return this.authService.signOut(p);
+  }
 }
-
-@Controller() export class CoreController {
-  constructor(@InjectRepository(AuthSession) private sessions:Repository<AuthSession>, @InjectRepository(StudentProfile) private profiles:Repository<StudentProfile>, @InjectRepository(StudentPreference) private preferences:Repository<StudentPreference>, @InjectRepository(StudentSkill) private studentSkills:Repository<StudentSkill>, @InjectRepository(Skill) private skills:Repository<Skill>, @InjectRepository(Company) private companies:Repository<Company>, @InjectRepository(CompanyStaff) private staff:Repository<CompanyStaff>, @InjectRepository(Posting) private postings:Repository<Posting>, @InjectRepository(PostingSkill) private postingSkills:Repository<PostingSkill>, @InjectRepository(SavedPosting) private saved:Repository<SavedPosting>, @InjectRepository(Application) private apps:Repository<Application>, @InjectRepository(ApplicationDocument) private appDocs:Repository<ApplicationDocument>, @InjectRepository(ApplicationHistory) private history:Repository<ApplicationHistory>, @InjectRepository(Placement) private placements:Repository<Placement>, @InjectRepository(Task) private tasks:Repository<Task>, @InjectRepository(Notification) private notifications:Repository<Notification>, @InjectRepository(SupervisorAssignment) private assignments:Repository<SupervisorAssignment>, @InjectRepository(SupervisorProfile) private supervisorProfiles:Repository<SupervisorProfile>, @InjectRepository(UserRole) private userRoles:Repository<UserRole>, private db:DataSource, private jwt:JwtService, private health:SchedulerHealthService) {}
-  @Get('health') @Public() healthcheck(){const scheduler=this.health.snapshot();return {status:scheduler.fresh?'ok':'degraded',scheduler};}
-  @Get('me') me(@CurrentUser() p:Principal){return {id:p.id,roles:p.roles,activeRole:p.role};}
-  @Put('me/active-role') async setRole(@CurrentUser() p:Principal,@Body() body:any){assert(p.roles.includes(body.role));return this.db.transaction(async m=>{const s=await m.getRepository(AuthSession).createQueryBuilder('s').setLock('pessimistic_write').where('s.id=:id',{id:p.sid}).getOneOrFail();if(s.activeRole!==body.role){s.activeRole=body.role;s.version++;await m.save(s);}return {activeRole:s.activeRole,accessToken:await this.jwt.signAsync({id:p.id,sid:p.sid,role:s.activeRole,version:s.version,roles:p.roles})};});}
-  @Get('students/me') @Roles('STUDENT') async profile(@CurrentUser() p:Principal){return this.ensureProfile(p.id);}
-  @Patch('students/me') @Roles('STUDENT') async updateProfile(@CurrentUser() p:Principal,@Body() body:any){const x=await this.ensureProfile(p.id);Object.assign(x,body,{userId:p.id});return this.profiles.save(x);}
-  @Get('students/me/skills') @Roles('STUDENT') async getSkills(@CurrentUser() p:Principal){return this.skillDtos(p.id);}
-  @Put('students/me/skills') @Roles('STUDENT') async setSkills(@CurrentUser() p:Principal,@Body() body:any){return this.db.transaction(async m=>{await this.ensureProfile(p.id,m);const input=body.skills??[];const found=await Promise.all(input.map((x:any)=>this.resolveSkill(x,m)));if(new Set(found.map(x=>x.id)).size!==found.length)throw new BadRequestException('Duplicate skills');await m.getRepository(StudentSkill).delete({studentId:p.id});await m.getRepository(StudentSkill).save(found.map((s,i)=>({studentId:p.id,skillId:s.id,proficiency:input[i].proficiency?.toUpperCase()})));return found.map((s,i)=>({id:s.id,name:s.name,proficiency:input[i].proficiency?.toUpperCase()}));});}
-  @Get('students/me/preferences') @Roles('STUDENT') async getPreferences(@CurrentUser() p:Principal){return (await this.preferences.findOneBy({studentId:p.id}))??this.preferences.save({studentId:p.id,industries:[],locations:[],workArrangements:[]});}
-  @Put('students/me/preferences') @Roles('STUDENT') async setPreferences(@CurrentUser() p:Principal,@Body() body:any){const x=(await this.preferences.findOneBy({studentId:p.id}))??this.preferences.create({studentId:p.id,industries:[],locations:[],workArrangements:[]});Object.assign(x,body,{studentId:p.id});return this.preferences.save(x);}
-  @Get('postings') async postingsList(@CurrentUser() p:Principal){const rows=await this.postings.find();return Promise.all(rows.map(x=>this.postingDto(x,p.role==='STUDENT'?p.id:undefined)));}
-  @Get('companies') async listCompanies(){return this.companies.find();}
-  @Get('companies/:id') async company(@Param('id')id:string){const c=await this.companies.findOneBy({id});if(!c)throw new NotFoundException();return c;}
-  @Get('postings/:id') async getPosting(@CurrentUser() p:Principal,@Param('id')id:string){const x=await this.postings.findOneBy({id});if(!x)throw new NotFoundException();return this.postingDto(x,p.role==='STUDENT'?p.id:undefined);}
-  @Post('postings') @Roles('COMPANY_STAFF','ADMIN') async createPosting(@CurrentUser() p:Principal,@Body() body:any){await this.companyAccess(p,body.companyId);return this.db.transaction(async m=>{const posting=await m.getRepository(Posting).save({...body,status:'DRAFT',skillsDeclared:body.skills!==undefined,createdByUserId:p.id});await this.replacePostingSkills(posting.id,body.skills??[],m);return this.postingDto(posting);});}
-  @Put('postings/:id/saved') @Roles('STUDENT') async savePosting(@CurrentUser()p:Principal,@Param('id')id:string){await this.saved.upsert({studentId:p.id,postingId:id},['studentId','postingId']);return {saved:true};}
-  @Post('applications') @Roles('STUDENT') async apply(@CurrentUser()p:Principal,@Body()b:any){const required=['coverNote','contactName','contactEmail','university','major','availability'];if(required.some(x=>!String(b[x]??'').trim())||!b.cvDocumentId)throw new BadRequestException('Application is incomplete');return this.db.transaction(async m=>{const posting=await m.getRepository(Posting).createQueryBuilder('p').setLock('pessimistic_write').where('p.id=:id',{id:b.postingId}).getOne();if(!posting||posting.status!=='OPEN')throw new ConflictException('Posting unavailable');const app=await m.getRepository(Application).save({studentId:p.id,postingId:b.postingId,cvDocumentId:b.cvDocumentId,coverNote:b.coverNote.trim(),contactName:b.contactName.trim(),contactEmail:b.contactEmail.trim(),contactPhone:b.contactPhone?.trim(),university:b.university.trim(),major:b.major.trim(),graduationYear:b.graduationYear,availability:b.availability.trim()});if(b.supportingDocumentIds?.length)await m.getRepository(ApplicationDocument).save(b.supportingDocumentIds.map((documentId:string)=>({applicationId:app.id,documentId,kind:'SUPPORTING'})));await m.getRepository(ApplicationHistory).save({applicationId:app.id,toStatus:'SUBMITTED',actorUserId:p.id});return app;});}
-  @Get('applications') async applications(@CurrentUser()p:Principal){if(p.role==='STUDENT')return this.apps.findBy({studentId:p.id});if(p.role==='ADMIN')return this.apps.find();const memberships=await this.staff.findBy({userId:p.id,active:true});const postings=await this.postings.findBy({companyId:In(memberships.map(x=>x.companyId))});return this.apps.findBy({postingId:In(postings.map(x=>x.id))});}
-  @Get('applications/:id') async application(@CurrentUser()p:Principal,@Param('id')id:string){const app=await this.apps.findOneBy({id});if(!app)throw new NotFoundException();if(p.role==='STUDENT')assert(app.studentId===p.id);return {...app,history:await this.history.findBy({applicationId:id})};}
-  @Post('applications/:id/status') @Roles('COMPANY_STAFF','ADMIN') async accept(@CurrentUser() p:Principal,@Param('id') id:string,@Body() b:any){if(b.status!=='ACCEPTED'||!b.supervisorUserId||!b.startDate||!b.endDate||b.endDate<b.startDate)throw new BadRequestException('Invalid acceptance');const command={supervisorUserId:b.supervisorUserId,startDate:b.startDate,endDate:b.endDate,note:b.note?.trim()||null};return this.db.transaction(async m=>{const app=await m.getRepository(Application).createQueryBuilder('a').setLock('pessimistic_write').where('a.id=:id',{id}).getOne();if(!app)throw new NotFoundException();const posting=await m.getRepository(Posting).findOneByOrFail({id:app.postingId});await this.companyAccess(p,posting.companyId,m);const existing=await m.getRepository(Placement).findOneBy({applicationId:id});const accepted=await m.getRepository(ApplicationHistory).findOneBy({applicationId:id,toStatus:'ACCEPTED'});if(app.status==='ACCEPTED'){if(existing&&JSON.stringify(accepted?.acceptanceCommand??null)===JSON.stringify(command))return {application:app,placement:existing};throw new ConflictException('ACCEPTANCE_CONFLICT');}if(app.status!=='INTERVIEW')throw new ConflictException('Invalid application transition');if(!await m.getRepository(UserRole).exist({where:{userId:b.supervisorUserId,role:'SUPERVISOR'}})||!await m.getRepository(SupervisorProfile).exist({where:{userId:b.supervisorUserId}}))throw new BadRequestException('Supervisor is not eligible');app.status='ACCEPTED';await m.save(app);await m.getRepository(ApplicationHistory).save({applicationId:id,fromStatus:'INTERVIEW',toStatus:'ACCEPTED',actorUserId:p.id,note:command.note??undefined,acceptanceCommand:command});const placement=await m.getRepository(Placement).save({applicationId:id,studentId:app.studentId,postingId:posting.id,companyId:posting.companyId,termId:posting.termId,startDate:b.startDate,endDate:b.endDate,status:'ACTIVE',reportingTimezone:'Asia/Ho_Chi_Minh'});await m.getRepository(SupervisorAssignment).save({placementId:placement.id,supervisorUserId:b.supervisorUserId,assignedByUserId:p.id,reason:command.note??undefined});await m.getRepository(ReportingPeriod).save(reportingPeriods(b.startDate,b.endDate,placement.reportingTimezone).map(x=>({placementId:placement.id,...x})));return {application:app,placement};});}
-  private async ensureProfile(userId:string,m?:any){const r=m?.getRepository(StudentProfile)??this.profiles;return (await r.findOneBy({userId}))??r.save({userId});}
-  private async companyAccess(p:Principal,companyId:string,m?:any){if(p.role==='ADMIN')return;assert(await (m?.getRepository(CompanyStaff)??this.staff).exist({where:{companyId,userId:p.id,active:true}}));}
-  private async resolveSkill(x:any,m:any){if(x.id){const e=await m.getRepository(Skill).findOneBy({id:x.id});if(e)return e;}const normalizedName=normalizeCanonicalSkill(x.name);if(!normalizedName)throw new BadRequestException('Invalid skill');const r=m.getRepository(Skill);return (await r.findOneBy({normalizedName}))??r.save({name:x.name.normalize('NFKC').trim().replace(/\s+/gu,' '),normalizedName});}
-  private async replacePostingSkills(postingId:string,input:any[],m:any){const found=await Promise.all(input.map(x=>this.resolveSkill(x,m)));if(new Set(found.map(x=>x.id)).size!==found.length)throw new BadRequestException('Duplicate skills');await m.getRepository(PostingSkill).delete({postingId});if(found.length)await m.getRepository(PostingSkill).save(found.map((x,i)=>({postingId,skillId:x.id,importance:input[i].importance})));}
-  private async skillDtos(studentId:string){const links=await this.studentSkills.findBy({studentId});const all=await this.skills.findBy({id:In(links.map(x=>x.skillId))});return links.map(x=>({id:x.skillId,name:all.find(s=>s.id===x.skillId)?.name,proficiency:x.proficiency}));}
-  private async postingDto(posting:Posting,studentId?:string){const links=await this.postingSkills.findBy({postingId:posting.id});const all=await this.skills.findBy({id:In(links.map(x=>x.skillId))});const skills=links.map(x=>({id:x.skillId,name:all.find(s=>s.id===x.skillId)?.name??'',importance:x.importance}));return studentId?{...posting,skills,match:calculateMatchScore((await this.studentSkills.findBy({studentId})).map(x=>x.skillId),skills)}:{...posting,skills};}
+@Controller()
+export class CoreController {
+  constructor(
+    private readonly identityService: IdentityService,
+    private readonly profilesService: ProfilesService,
+    private readonly postingsService: PostingsService,
+    private readonly applicationsService: ApplicationsService,
+  ) {}
+  @Get("health") @Public() healthcheck() {
+    return this.identityService.healthcheck();
+  }
+  @Get("me") me(@CurrentUser() p: Principal) {
+    return this.identityService.me(p);
+  }
+  @Put("me/active-role") async setRole(
+    @CurrentUser() p: Principal,
+    @Body() body: RoleDto,
+  ) {
+    return this.identityService.setRole(p, body);
+  }
+  @Get("students/me") @Roles("STUDENT") async profile(
+    @CurrentUser() p: Principal,
+  ) {
+    return this.profilesService.profile(p);
+  }
+  @Patch("students/me") @Roles("STUDENT") async updateProfile(
+    @CurrentUser() p: Principal,
+    @Body() body: ProfileDto,
+  ) {
+    return this.profilesService.updateProfile(p, body);
+  }
+  @Get("students/me/skills") @Roles("STUDENT") async getSkills(
+    @CurrentUser() p: Principal,
+  ) {
+    return this.profilesService.getSkills(p);
+  }
+  @Put("students/me/skills") @Roles("STUDENT") async setSkills(
+    @CurrentUser() p: Principal,
+    @Body() body: SkillsDto,
+  ) {
+    return this.profilesService.setSkills(p, body);
+  }
+  @Get("students/me/preferences") @Roles("STUDENT") async getPreferences(
+    @CurrentUser() p: Principal,
+  ) {
+    return this.profilesService.getPreferences(p);
+  }
+  @Put("students/me/preferences") @Roles("STUDENT") async setPreferences(
+    @CurrentUser() p: Principal,
+    @Body() body: PreferencesDto,
+  ) {
+    return this.profilesService.setPreferences(p, body);
+  }
+  @Get("postings") async postingsList(
+    @CurrentUser() p: Principal,
+    @Query() query: PostingQueryDto = new PostingQueryDto(),
+  ) {
+    return this.postingsService.postingsList(p, query);
+  }
+  @Get("companies") async listCompanies() {
+    return this.postingsService.listCompanies();
+  }
+  @Get("companies/:id") async company(@Param("id") id: string) {
+    return this.postingsService.company(id);
+  }
+  @Get("postings/:id") async getPosting(
+    @CurrentUser() p: Principal,
+    @Param("id") id: string,
+  ) {
+    return this.postingsService.getPosting(p, id);
+  }
+  @Post("postings") @Roles("COMPANY_STAFF", "ADMIN") async createPosting(
+    @CurrentUser() p: Principal,
+    @Body() body: PostingDto,
+  ) {
+    return this.postingsService.createPosting(p, body);
+  }
+  @Put("postings/:id/saved") @Roles("STUDENT") async savePosting(
+    @CurrentUser() p: Principal,
+    @Param("id") id: string,
+  ) {
+    return this.postingsService.savePosting(p, id);
+  }
+  @Post("applications") @Roles("STUDENT") async apply(
+    @CurrentUser() p: Principal,
+    @Body() b: ApplicationDto,
+  ) {
+    return this.applicationsService.apply(p, b);
+  }
+  @Get("applications") async applications(
+    @CurrentUser() p: Principal,
+    @Query() page: PageDto,
+  ) {
+    return this.applicationsService.applications(p, page);
+  }
+  @Get("applications/:id") async application(
+    @CurrentUser() p: Principal,
+    @Param("id") id: string,
+  ) {
+    return this.applicationsService.application(p, id);
+  }
+  @Post("applications/:id/status")
+  @Roles("COMPANY_STAFF", "ADMIN")
+  async accept(
+    @CurrentUser() p: Principal,
+    @Param("id") id: string,
+    @Body() b: TransitionDto,
+  ) {
+    return this.applicationsService.accept(p, id, b);
+  }
+  @Post("applications/:id/withdraw") @Roles("STUDENT") withdraw(
+    @CurrentUser() p: Principal,
+    @Param("id") id: string,
+  ) {
+    return this.applicationsService.withdraw(p, id);
+  }
 }
