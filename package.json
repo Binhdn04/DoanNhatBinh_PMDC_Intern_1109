@@ -13,7 +13,7 @@
     "test:api": "pnpm --filter @internhub/api test",
     "test:domain": "pnpm --filter @internhub/domain test",
     "test": "pnpm test:domain && pnpm test:api && pnpm test:web",
-    "test:coverage": "pnpm --filter @internhub/domain test:coverage && pnpm --filter @internhub/api test:coverage && pnpm --filter @internhub/web test:coverage",
+    "test:coverage": "pnpm --filter @internhub/domain test:coverage && pnpm test:integration --coverage && pnpm test:coverage:web",
     "db:migrate": "pnpm --filter @internhub/api migration:run",
     "db:seed": "pnpm --filter @internhub/api seed",
     "contracts:generate": "pnpm --filter @internhub/contracts generate",
@@ -24,11 +24,16 @@
     "build": "pnpm build:api && pnpm build:web",
     "test:browser": "playwright test",
     "lint": "node scripts/check-boundaries.cjs",
-    "contracts:check": "node scripts/check-contracts.cjs && pnpm --filter @internhub/contracts exec openapi-typescript ../../docs/api/openapi.yaml --check -o src/generated/openapi.ts"
+    "contracts:check": "node scripts/check-contracts.cjs && pnpm --filter @internhub/contracts exec openapi-typescript ../../docs/api/openapi.yaml --check -o src/generated/openapi.ts",
+    "test:coverage:web": "node scripts/test-web-coverage.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "embedded-postgres": "18.4.0-beta.17",
-    "prettier": "^3.9.7"
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.2.0",
+    "prettier": "^3.9.7",
+    "v8-to-istanbul": "^9.3.0"
   }
 }

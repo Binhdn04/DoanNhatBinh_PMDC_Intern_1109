@@ -18,13 +18,34 @@ jobs:
       - run: pnpm format:check
       - run: pnpm contracts:check
       - run: pnpm build
-      - run: pnpm test
-      - run: pnpm test:integration
-      - run: pnpm test:coverage
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:browser
+      - run: pnpm test:coverage
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-results
           path: test-results/
+  storage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: docker run -d --name internhub-test-storage -p 127.0.0.1:9000:9000 -e MINIO_ROOT_USER=internhub-test -e MINIO_ROOT_PASSWORD=integration-only-secret minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+      - run: curl --retry 20 --retry-delay 1 --retry-connrefused --fail http://localhost:9000/minio/health/ready
+      - run: pnpm test:integration
+        env:
+          MINIO_INTEGRATION: '1'
+          MINIO_ENDPOINT: localhost
+          MINIO_PORT: '9000'
+          MINIO_ACCESS_KEY: internhub-test
+          MINIO_SECRET_KEY: integration-only-secret
+          MINIO_BUCKET: internhub-integration
+      - if: always()
+        run: docker logs internhub-test-storage
