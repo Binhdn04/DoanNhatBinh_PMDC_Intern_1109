@@ -5,21 +5,21 @@ services:
       POSTGRES_DB: internhub
       POSTGRES_USER: internhub
       POSTGRES_PASSWORD: internhub
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["postgres_data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U internhub -d internhub"]
       interval: 5s
       timeout: 5s
       retries: 10
-  # minio:
-  #   image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-  #   command: server /data --console-address :9001
-  #   environment:
-  #     MINIO_ROOT_USER: internhub
-  #     MINIO_ROOT_PASSWORD: internhub-dev-password
-  #   ports: ["9000:9000", "9001:9001"]
-  #   volumes: ["minio_data:/data"]
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
+    volumes: ["minio_data:/data"]
 volumes:
   postgres_data:
   minio_data:

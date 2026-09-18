@@ -1,0 +1,9 @@
+node_modules
+**/dist
+**/coverage*
+packages/contracts/src/generated
+apps/api/src/infrastructure/database/migrations/1770000000000-initial-schema.ts
+apps/api/src/infrastructure/database/migrations/1770000001000-canonical-workflows.ts
+apps/api/src/infrastructure/database/migrations/1770000002000-workflow-hardening.ts
+apps/api/src/infrastructure/database/migrations/1770000003000-complete-canonical-schema.ts
+pnpm-lock.yaml

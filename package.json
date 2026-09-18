@@ -16,6 +16,19 @@
     "test:coverage": "pnpm --filter @internhub/domain test:coverage && pnpm --filter @internhub/api test:coverage && pnpm --filter @internhub/web test:coverage",
     "db:migrate": "pnpm --filter @internhub/api migration:run",
     "db:seed": "pnpm --filter @internhub/api seed",
-    "contracts:generate": "pnpm --filter @internhub/contracts generate"
+    "contracts:generate": "pnpm --filter @internhub/contracts generate",
+    "test:integration": "node scripts/test-integration.mjs",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,json,cjs}\" \"packages/**/*.{ts,json,cjs}\" \"scripts/*.{mjs,cjs}\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,json,cjs}\" \"packages/**/*.{ts,json,cjs}\" \"scripts/*.{mjs,cjs}\"",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm build:api && pnpm build:web",
+    "test:browser": "playwright test",
+    "lint": "node scripts/check-boundaries.cjs",
+    "contracts:check": "node scripts/check-contracts.cjs && pnpm --filter @internhub/contracts exec openapi-typescript ../../docs/api/openapi.yaml --check -o src/generated/openapi.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "embedded-postgres": "18.4.0-beta.17",
+    "prettier": "^3.9.7"
   }
 }
