@@ -50,7 +50,7 @@ pnpm test:browser
 pnpm test:coverage
 ```
 
-Integration tests start a disposable embedded PostgreSQL database; they never use the development database. Browser tests start their own PostgreSQL, API and Vite processes. These tests need permission to listen on local ports. Their object-storage adapter is an in-memory test double; they do not establish MinIO deployment correctness. Coverage thresholds remain 80%; a failing gate is a remaining quality gap, not proof that passing unit tests establish production readiness.
+Integration tests start a disposable embedded PostgreSQL database; they never use the development database. Browser tests start their own PostgreSQL, API and Vite processes. These tests need permission to listen on local ports. By default their object-storage adapter is an in-memory test double. Set `MINIO_INTEGRATION=1` plus MinIO connection variables to run the HTTP suite against real private storage; a separate CI job does this. Local real-MinIO verification remains pending in environments without the server image. Coverage combines API unit/HTTP tests and web unit/browser tests, then enforces 80% for statements, branches, functions and lines. The unit-only web coverage command reports only that subset. Coverage thresholds remain 80%; a failing gate is a remaining quality gap, not proof that passing unit tests establish production readiness.
 
 `lint` checks architectural boundaries (DTO bodies and controller/service separation); it is not a complete TypeScript lint configuration. CI runs typechecks, contract checks, builds, tests, coverage and the browser journey.
 
