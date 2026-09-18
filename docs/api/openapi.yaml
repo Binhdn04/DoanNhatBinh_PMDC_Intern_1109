@@ -2,965 +2,3677 @@ openapi: 3.0.3
 info:
   title: InternHub API
   version: 1.0.0-draft
-  description: |
-    Target REST contract for the InternHub three-tier modular monolith. All paths
-    begin after authentication; an active role is supplied by the authenticated
-    session/token and enforced with the caller's record relationship. AI endpoints
-    are optional advisory enrichment only. There are no AI interview, screening,
-    automated-decision, semantic-search, or external-notification endpoints.
-    All protected operations can return 401 for an invalid session and 403 for
-    a forbidden role/relationship. Malformed DTOs return 400. Required text is
-    trimmed and must contain a non-whitespace character; lifecycle-dependent
-    validation (publish/submit) also checks required content. Report privacy may
-    return 404 instead of disclosing a private draft. Behavioral rules and
-    acceptance scenarios are in docs/design/behavior-rules.md and traceability.md.
+  description: Implemented InternHub HTTP API. Optional AI is disabled. See target-openapi.yaml
+    for deferred design proposals, not supported operations.
 servers:
-  - url: /api/v1
-    description: Same-origin production API
+- url: /api/v1
+  description: Same-origin production API
 tags:
-  - name: Identity
-  - name: Students
-  - name: Documents
-  - name: Companies
-  - name: Postings
-  - name: Applications
-  - name: Placements
-  - name: Reports
-  - name: Evaluations
-  - name: Monitoring
-  - name: Notifications
-  - name: AI jobs
+- name: Identity
+- name: Students
+- name: Documents
+- name: Companies
+- name: Postings
+- name: Applications
+- name: Placements
+- name: Reports
+- name: Evaluations
+- name: Monitoring
+- name: Notifications
+- name: AI jobs
 security:
-  - bearerAuth: []
+- bearerAuth: []
 paths:
-  /health:
-    get:
-      tags: [Identity]
-      security: []
-      summary: Read API and deadline-scheduler freshness
-      operationId: getHealth
-      responses:
-        '200': {description: API health with scheduler freshness}
   /auth/sign-in:
     post:
-      tags: [Identity]
+      tags:
+      - Identity
       security: []
       summary: Create a local development session
       operationId: signIn
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [email, password], properties: {email: {type: string, format: email}, password: {type: string, format: password}, activeRole: {$ref: '#/components/schemas/Role'}}}}}}
-      responses: {'201': {description: Bearer session}}
-  /auth/refresh:
-    post:
-      tags: [Identity]
-      security: []
-      summary: Refresh a valid local session token
-      operationId: refreshSession
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [token], properties: {token: {type: string}}}}}}
-      responses: {'201': {description: Replacement bearer session}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignIn'
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /auth/sign-out:
     post:
-      tags: [Identity]
+      tags:
+      - Identity
       summary: Revoke the current local session
       operationId: signOut
-      responses: {'201': {description: Session revoked}}
+      responses:
+        '201':
+          description: Session revoked
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+  /health:
+    get:
+      tags:
+      - Identity
+      security: []
+      summary: Read API and deadline-scheduler freshness
+      operationId: healthcheck
+      responses:
+        '200':
+          description: API health with scheduler freshness
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /me:
     get:
-      tags: [Identity]
+      tags:
+      - Identity
       summary: Get authenticated identity and permitted roles
-      operationId: getMe
+      operationId: me
       responses:
-        '200': {description: Current identity, content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /me/active-role:
     put:
-      tags: [Identity]
+      tags:
+      - Identity
       summary: Select a permitted role and rotate the current session token
-      description: Validate current user_roles; lock the session and increment its version when changing role. Old tokens for this session then return 401. Selecting the existing role is a no-op. Other sessions are unchanged. See identity protocol in arc42.
-      operationId: setActiveRole
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ActiveRoleInput'}}}}
+      description: Validate current user_roles; lock the session and increment its
+        version when changing role. Old tokens for this session then return 401. Selecting
+        the existing role is a no-op. Other sessions are unchanged. See identity protocol
+        in arc42.
+      operationId: setRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActiveRoleRequest'
       responses:
-        '200': {description: Authoritative identity and replacement bearer token, content: {application/json: {schema: {$ref: '#/components/schemas/RoleSession'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-  /supervisors:
-    get:
-      tags: [Placements]
-      summary: Find eligible supervisors for acceptance or Admin assignment management
-      description: Supply exactly one applicationId or placementId. Own-company Staff/Admin may query an application; only Admin may query a placement. Eligibility means a user currently holds SUPERVISOR and a supervisor profile. No company or program restriction is imposed in v1. This lookup grants no placement access.
-      operationId: listEligibleSupervisors
-      parameters:
-        - {name: applicationId, in: query, schema: {$ref: '#/components/schemas/Id'}}
-        - {name: placementId, in: query, schema: {$ref: '#/components/schemas/Id'}}
-        - {$ref: '#/components/parameters/Search'}
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/PageSize'}
-      responses:
-        '200': {description: Eligible supervisor page, content: {application/json: {schema: {$ref: '#/components/schemas/SupervisorPage'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-  /placements/{placementId}/supervisor-assignments:
-    get:
-      tags: [Placements]
-      summary: Get retained supervisor assignment history as Admin
-      operationId: listSupervisorAssignments
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses:
-        '200': {description: Assignment history ordered by assignedAt, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SupervisorAssignment'}}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
-    post:
-      tags: [Placements]
-      summary: Assign, replace, or revoke an Active placement supervisor as Admin
-      description: Lock placement and compare expectedAssignmentId to its active assignment (null means unassigned). Revoke the prior row and optionally insert the replacement atomically. Retain actor, time, and reason. Same supervisor is a no-op; stale expected assignment returns 409. Access is checked on every subsequent request.
-      operationId: changeSupervisorAssignment
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AssignmentChangeInput'}}}}
-      responses:
-        '200': {description: Updated placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {$ref: '#/components/responses/Conflict'}
-  /placements/{placementId}/reporting-periods:
-    get:
-      tags: [Reports]
-      summary: List canonical reporting weeks and deadlines including weeks with no report
-      operationId: listReportingPeriods
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses:
-        '200': {description: Periods in ascending week order for an authorized placement participant, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ReportingPeriod'}}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /students/me:
     get:
-      tags: [Students]
+      tags:
+      - Students
       summary: Get the current Student profile
-      operationId: getMyStudentProfile
+      operationId: profile
       responses:
-        '200': {description: Profile, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfile'}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfile'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
     patch:
-      tags: [Students]
+      tags:
+      - Students
       summary: Update the current Student contact and education profile
-      operationId: updateMyStudentProfile
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfileInput'}}}}
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentProfileInput'
       responses:
-        '200': {description: Updated profile, content: {application/json: {schema: {$ref: '#/components/schemas/StudentProfile'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-        '403': {$ref: '#/components/responses/Forbidden'}
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfile'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /students/me/skills:
     get:
-      tags: [Students]
-      summary: Reload the current Student skill set including stable skill IDs and optional proficiency
-      operationId: getMySkills
+      tags:
+      - Students
+      summary: Reload the current Student skill set including stable skill IDs and
+        optional proficiency
+      operationId: getSkills
       responses:
-        '200': {description: Current skills, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StudentSkill'}}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
+        '200':
+          description: Records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentSkill'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
     put:
-      tags: [Students]
+      tags:
+      - Students
       summary: Replace the current Student skill set
-      operationId: replaceMySkills
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SkillSetInput'}}}}
+      operationId: setSkills
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceSkills'
       responses:
-        '200': {description: Saved skills, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StudentSkill'}}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
+        '200':
+          description: Saved skills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentSkill'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /students/me/preferences:
     get:
-      tags: [Students]
+      tags:
+      - Students
       summary: Get current Student career preferences
-      operationId: getMyPreferences
-      responses: {'200': {description: Preferences, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}}
+      operationId: getPreferences
+      responses:
+        '200':
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
     put:
-      tags: [Students]
+      tags:
+      - Students
       summary: Replace current Student career preferences
-      operationId: replaceMyPreferences
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
+      operationId: setPreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Preferences'
       responses:
-        '200': {description: Saved preferences, content: {application/json: {schema: {$ref: '#/components/schemas/Preferences'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-  /documents:
-    get:
-      tags: [Documents]
-      summary: List reusable documents owned by the current Student
-      operationId: listMyDocuments
-      responses: {'200': {description: Document list, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentList'}}}}}
-    post:
-      tags: [Documents]
-      summary: Start an authorized private-document upload
-      operationId: createDocumentUpload
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUploadRequest'}}}}
-      responses:
-        '201': {description: Upload authorization, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUpload'}}}}
-        '400': {$ref: '#/components/responses/ValidationError'}
-  /documents/{documentId}:
-    delete:
-      tags: [Documents]
-      summary: Remove a reusable document link when no draft or submitted record retains it
-      operationId: deleteDocument
-      parameters: [{$ref: '#/components/parameters/DocumentId'}]
-      responses:
-        '204': {description: Removed}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {$ref: '#/components/responses/Conflict'}
-  /documents/{documentId}/content:
-    parameters:
-      - {$ref: '#/components/parameters/DocumentId'}
-      - {name: transferToken, in: query, required: true, schema: {type: string}, description: 'API-signed five-minute authorization bound to user session, document, and HTTP method; bearer authentication and current record authorization are also required.'}
-    put:
-      tags: [Documents]
-      summary: Stream document bytes through the API to private storage
-      description: Only the owner of a PENDING document may upload. Token binds declared size, media type and digest. Limit 10 MiB; PDF, JPEG, PNG or DOCX only. Verify actual bytes, digest and signature before completion. Repeating the same bytes before completion is safe; AVAILABLE documents cannot be overwritten.
-      operationId: uploadDocumentContent
-      requestBody: {required: true, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
-      responses:
-        '204': {description: Bytes stored pending completion}
-        '400': {$ref: '#/components/responses/ValidationError'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {$ref: '#/components/responses/Conflict'}
-        '413': {description: File exceeds 10 MiB}
-    get:
-      tags: [Documents]
-      summary: Stream an authorized AVAILABLE document through the API
-      operationId: downloadDocumentContent
-      responses:
-        '200': {description: File bytes with safe Content-Disposition attachment filename, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {$ref: '#/components/responses/Conflict'}
-  /documents/{documentId}/complete:
-    post:
-      tags: [Documents]
-      summary: Finalize a private-document upload after API-mediated transfer
-      description: Verify stored bytes against declared size and digest and supported file signatures. AVAILABLE completion retries return the same document; invalid bytes result in REJECTED. No browser storage transfer occurs.
-      operationId: completeDocumentUpload
-      parameters: [{$ref: '#/components/parameters/DocumentId'}]
-      responses:
-        '200': {description: Available document, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
-        '409': {$ref: '#/components/responses/Conflict'}
-  /documents/{documentId}/download-url:
-    get:
-      tags: [Documents]
-      summary: Issue a short-lived download URL for an authorized document
-      operationId: getDocumentDownloadUrl
-      parameters: [{$ref: '#/components/parameters/DocumentId'}]
-      responses:
-        '200': {description: Authorized URL, content: {application/json: {schema: {$ref: '#/components/schemas/DownloadUrl'}}}}
-        '403': {$ref: '#/components/responses/Forbidden'}
-  /companies:
-    get:
-      tags: [Companies]
-      summary: List companies available to the active role
-      operationId: listCompanies
-      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Search'}]
-      responses: {'200': {description: Company page, content: {application/json: {schema: {$ref: '#/components/schemas/CompanyPage'}}}}}
-  /companies/{companyId}:
-    get:
-      tags: [Companies]
-      summary: Get a company profile
-      operationId: getCompany
-      parameters: [{$ref: '#/components/parameters/CompanyId'}]
-      responses: {'200': {description: Company, content: {application/json: {schema: {$ref: '#/components/schemas/Company'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
-    patch:
-      tags: [Companies]
-      summary: Update an owned or administered company profile
-      operationId: updateCompany
-      parameters: [{$ref: '#/components/parameters/CompanyId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CompanyInput'}}}}
-      responses: {'200': {description: Updated company, content: {application/json: {schema: {$ref: '#/components/schemas/Company'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '400': {$ref: '#/components/responses/ValidationError'}}
+        '200':
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
   /postings:
     get:
-      tags: [Postings]
+      tags:
+      - Postings
       summary: Discover eligible postings or list managed postings
-      description: Student requests return only Open, non-expired postings. Company Staff and Admin receive records within their authorized management scope; `includeUnavailable` is ignored for Student discovery.
-      operationId: listPostings
+      description: Student requests return only Open, non-expired postings. Company
+        Staff and Admin receive records within their authorized management scope;
+        `includeUnavailable` is ignored for Student discovery.
+      operationId: postingsList
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Posting'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
       parameters:
-        - {$ref: '#/components/parameters/Page'}
-        - {$ref: '#/components/parameters/PageSize'}
-        - {$ref: '#/components/parameters/Search'}
-        - {name: category, in: query, schema: {type: string}}
-        - {name: location, in: query, schema: {type: string}}
-        - {name: durationWeeks, in: query, schema: {type: integer, minimum: 1}}
-        - {name: workArrangement, in: query, schema: {$ref: '#/components/schemas/WorkArrangement'}}
-        - {name: sort, in: query, schema: {type: string, enum: [relevance, newest, match_score], default: relevance}, description: Stable ordering and preference dimensions follow skill-v1 behavior rules.}
-        - {name: companyId, in: query, schema: {type: string, format: uuid}}
-        - {name: includeUnavailable, in: query, schema: {type: boolean, default: false}}
-      responses: {'200': {description: Posting page, content: {application/json: {schema: {$ref: '#/components/schemas/PostingPage'}}}}}
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: sort
+        in: query
+        schema:
+          type: string
+      - name: location
+        in: query
+        schema:
+          type: string
+      - name: workArrangement
+        in: query
+        schema:
+          type: string
     post:
-      tags: [Postings]
+      tags:
+      - Postings
       summary: Create a Draft posting
       operationId: createPosting
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingInput'}}}}
-      responses: {'201': {description: Draft posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /postings/saved:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostingInput'
+      responses:
+        '201':
+          description: Draft posting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Posting'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+  /companies:
     get:
-      tags: [Postings]
-      summary: List the current Student's saved postings, including later-unavailable items
-      operationId: listSavedPostings
-      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
-      responses: {'200': {description: Saved posting page, content: {application/json: {schema: {$ref: '#/components/schemas/PostingPage'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /postings/{postingId}:
+      tags:
+      - Companies
+      summary: List companies available to the active role
+      operationId: listCompanies
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Company'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+  /companies/{id}:
     get:
-      tags: [Postings]
-      summary: Get an authorized posting detail and, for Students, deterministic match breakdown
+      tags:
+      - Companies
+      summary: Get a company profile
+      operationId: company
+      responses:
+        '200':
+          description: Company
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /postings/{id}:
+    get:
+      tags:
+      - Postings
+      summary: Get an authorized posting detail and, for Students, deterministic match
+        breakdown
       operationId: getPosting
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      responses: {'200': {description: Posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
-    patch:
-      tags: [Postings]
-      summary: Edit a Draft or otherwise authorized managed posting
-      operationId: updatePosting
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingInput'}}}}
-      responses: {'200': {description: Updated posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /postings/{postingId}/publish:
-    post:
-      tags: [Postings]
-      summary: Validate and publish a Draft posting
-      operationId: publishPosting
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      responses: {'200': {description: Open posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '422': {$ref: '#/components/responses/PublishValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /postings/{postingId}/lifecycle:
-    post:
-      tags: [Postings]
-      summary: Close or archive an authorized posting
-      operationId: transitionPostingLifecycle
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostingLifecycleInput'}}}}
-      responses: {'200': {description: Updated posting, content: {application/json: {schema: {$ref: '#/components/schemas/Posting'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /postings/{postingId}/saved:
+      responses:
+        '200':
+          description: Posting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Posting'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /postings/{id}/saved:
     put:
-      tags: [Postings]
+      tags:
+      - Postings
       summary: Save an eligible posting once for the current Student
       operationId: savePosting
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      responses: {'204': {description: Saved or already saved}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      responses:
+        '200':
+          description: Saved or already saved
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     delete:
-      tags: [Postings]
+      tags:
+      - Postings
       summary: Remove the current Student's saved posting
-      operationId: unsavePosting
-      parameters: [{$ref: '#/components/parameters/PostingId'}]
-      responses: {'204': {description: Removed}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /postings/{postingId}/applications:
-    get:
-      tags: [Applications]
-      summary: List applications for an owned or administered posting
-      operationId: listPostingApplications
-      parameters: [{$ref: '#/components/parameters/PostingId'}, {$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/ApplicationStatus'}}]
-      responses: {'200': {description: Application page, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationPage'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: unsave
+      responses:
+        '200':
+          description: Removed
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /applications:
-    get:
-      tags: [Applications]
-      summary: List applications available to the active role
-      operationId: listApplications
-      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/ApplicationStatus'}}, {name: postingId, in: query, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Application page, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationPage'}}}}}
     post:
-      tags: [Applications]
+      tags:
+      - Applications
       summary: Submit one application to an eligible posting
-      operationId: createApplication
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationInput'}}}}
-      responses: {'201': {description: Submitted application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /applications/{applicationId}:
+      operationId: apply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationInput'
+      responses:
+        '201':
+          description: Submitted application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
     get:
-      tags: [Applications]
-      summary: Get an authorized application, submission snapshot, documents, and immutable history
-      operationId: getApplication
-      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
-      responses: {'200': {description: Application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
-  /applications/{applicationId}/status:
+      tags:
+      - Applications
+      summary: List applications available to the active role
+      operationId: applications
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+  /applications/{id}:
+    get:
+      tags:
+      - Applications
+      summary: Get an authorized application, submission snapshot, documents, and
+        immutable history
+      operationId: application
+      responses:
+        '200':
+          description: Application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /applications/{id}/status:
     post:
-      tags: [Applications]
+      tags:
+      - Applications
       summary: Move an application through an authorized staff/Admin transition
-      description: Lock the application. From INTERVIEW, acceptance stores an immutable acceptance command and creates one placement, assignment, reporting calendar, history entry, and notification in one transaction. On ACCEPTED, an identical canonical supervisor/date/note command returns 200 with the existing placement link and no writes; different acceptance input returns 409 ACCEPTANCE_CONFLICT. Compare against the original command even after reassignment. Other terminal transitions return 409. Rejection is allowed from any staff-review non-terminal state.
-      operationId: transitionApplicationStatus
-      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ApplicationStatusTransitionInput'}}}}
-      responses: {'200': {description: Updated application and placement link when accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /applications/{applicationId}/withdraw:
+      description: Lock the application. From INTERVIEW, acceptance stores an immutable
+        acceptance command and creates one placement, assignment, reporting calendar,
+        history entry, and notification in one transaction. On ACCEPTED, an identical
+        canonical supervisor/date/note command returns 200 with the existing placement
+        link and no writes; different acceptance input returns 409 ACCEPTANCE_CONFLICT.
+        Compare against the original command even after reassignment. Other terminal
+        transitions return 409. Rejection is allowed from any staff-review non-terminal
+        state.
+      operationId: accept
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationStatusTransitionInput'
+      responses:
+        '201':
+          description: Transition completed. Acceptance returns application and placement;
+            identical retries return the same records.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/Application'
+                - type: object
+                  required:
+                  - application
+                  - placement
+                  properties:
+                    application:
+                      $ref: '#/components/schemas/Application'
+                    placement:
+                      $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /applications/{id}/withdraw:
     post:
-      tags: [Applications]
+      tags:
+      - Applications
       summary: Withdraw the current Student's non-terminal application
-      operationId: withdrawApplication
-      parameters: [{$ref: '#/components/parameters/ApplicationId'}]
-      requestBody: {content: {application/json: {schema: {$ref: '#/components/schemas/NoteInput'}}}}
-      responses: {'200': {description: Withdrawn application, content: {application/json: {schema: {$ref: '#/components/schemas/Application'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /placements:
+      operationId: withdraw
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteInput'
+      responses:
+        '201':
+          description: Withdrawn application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /supervisors:
     get:
-      tags: [Placements]
-      summary: List placements in the active role's permitted scope
-      operationId: listPlacements
-      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: status, in: query, schema: {$ref: '#/components/schemas/PlacementStatus'}}, {name: termId, in: query, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Placement page, content: {application/json: {schema: {$ref: '#/components/schemas/PlacementPage'}}}}}
-  /placements/{placementId}:
+      tags:
+      - Placements
+      summary: Find eligible supervisors for acceptance or Admin assignment management
+      description: Supply exactly one applicationId or placementId. Own-company Staff/Admin
+        may query an application; only Admin may query a placement. Eligibility means
+        a user currently holds SUPERVISOR and a supervisor profile. No company or
+        program restriction is imposed in v1. This lookup grants no placement access.
+      operationId: supervisors
+      responses:
+        '200':
+          description: Eligible supervisor page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupervisorPage'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: applicationId
+        in: query
+        schema:
+          type: string
+      - name: placementId
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+  /placements/{placementId}/supervisor-assignments:
     get:
-      tags: [Placements]
-      summary: Get authorized placement context and role-permitted progress summary
-      operationId: getPlacement
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses: {'200': {description: Placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /placements/{placementId}/lifecycle:
+      tags:
+      - Placements
+      summary: Get retained supervisor assignment history as Admin
+      operationId: assignmentHistory
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupervisorAssignment'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      summary: changeAssignment
+      responses:
+        '200':
+          description: Success
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      operationId: changeAssignment
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentChange'
+  /documents:
+    get:
+      tags:
+      - Documents
+      summary: List reusable documents owned by the current Student
+      operationId: listDocuments
+      responses:
+        '200':
+          description: Document list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
     post:
-      tags: [Placements]
-      summary: Complete or terminate an Active placement
-      operationId: transitionPlacementLifecycle
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PlacementLifecycleInput'}}}}
-      responses: {'200': {description: Updated placement, content: {application/json: {schema: {$ref: '#/components/schemas/Placement'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /placements/{placementId}/tasks:
+      tags:
+      - Documents
+      summary: Start an authorized private-document upload
+      operationId: beginDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUploadRequest'
+      responses:
+        '201':
+          description: Upload authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUpload'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+  /documents/{documentId}/content:
+    put:
+      tags:
+      - Documents
+      summary: Stream document bytes through the API to private storage
+      description: Only the owner of a PENDING document may upload. Token binds declared
+        size, media type and digest. Limit 10 MiB; PDF, JPEG, PNG or DOCX only. Verify
+        actual bytes, digest and signature before completion. Repeating the same bytes
+        before completion is safe; AVAILABLE documents cannot be overwritten.
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Bytes stored pending completion
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: transferToken
+        in: query
+        required: true
+        schema:
+          type: string
     get:
-      tags: [Placements]
-      summary: List tasks for an authorized placement
-      operationId: listPlacementTasks
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses: {'200': {description: Tasks, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Task'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      tags:
+      - Documents
+      summary: Stream an authorized AVAILABLE document through the API
+      operationId: downloadDocument
+      responses:
+        '200':
+          description: File bytes with safe Content-Disposition attachment filename
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: transferToken
+        in: query
+        required: true
+        schema:
+          type: string
+  /documents/{documentId}/complete:
     post:
-      tags: [Placements]
-      summary: Create a task on an Active assigned placement
-      operationId: createTask
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TaskInput'}}}}
-      responses: {'201': {description: Created task, content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
-  /placements/{placementId}/tasks/{taskId}/status:
-    patch:
-      tags: [Placements]
-      summary: Update task status as the placement Student
-      operationId: updateTaskStatus
-      parameters: [{$ref: '#/components/parameters/PlacementId'}, {$ref: '#/components/parameters/TaskId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TaskStatusInput'}}}}
-      responses: {'200': {description: Updated task, content: {application/json: {schema: {$ref: '#/components/schemas/Task'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      tags:
+      - Documents
+      summary: Finalize a private-document upload after API-mediated transfer
+      description: Verify stored bytes against declared size and digest and supported
+        file signatures. AVAILABLE completion retries return the same document; invalid
+        bytes result in REJECTED. No browser storage transfer occurs.
+      operationId: completeDocument
+      responses:
+        '201':
+          description: Available document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /documents/{documentId}:
+    delete:
+      tags:
+      - Documents
+      summary: Remove a reusable document link when no draft or submitted record retains
+        it
+      operationId: deleteDocument
+      responses:
+        '204':
+          description: Removed
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /documents/{documentId}/download-url:
+    get:
+      tags:
+      - Documents
+      summary: Issue a short-lived download URL for an authorized document
+      operationId: downloadUrl
+      responses:
+        '200':
+          description: Authorized URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrl'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /placements/{placementId}/reporting-periods:
+    get:
+      tags:
+      - Reports
+      summary: List canonical reporting weeks and deadlines including weeks with no
+        report
+      operationId: listPeriods
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportingPeriod'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /placements/{placementId}/reports:
     get:
-      tags: [Reports]
+      tags:
+      - Reports
       summary: List reports visible to the active role
       operationId: listReports
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses: {'200': {description: Reports, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/WeeklyReport'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      responses:
+        '200':
+          description: Records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags: [Reports]
+      tags:
+      - Reports
       summary: Create the current Student's private draft for one reporting week
-      operationId: createReportDraft
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportDraftInput'}}}}
-      responses: {'201': {description: Draft report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '409': {$ref: '#/components/responses/Conflict'}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: createDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportDraftInput'
+      responses:
+        '201':
+          description: Draft report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /reports/{reportId}:
     get:
-      tags: [Reports]
+      tags:
+      - Reports
       summary: Get an authorized report, versions, and review history
       operationId: getReport
-      parameters: [{$ref: '#/components/parameters/ReportId'}]
-      responses: {'200': {description: Report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     patch:
-      tags: [Reports]
+      tags:
+      - Reports
       summary: Save the current Student's draft or revision content
-      description: Draft input replaces the saved draft and attachment selection. reportingPeriodId cannot change. Only DRAFT or REVISION_REQUESTED on an Active owned placement; revision saves keep REVISION_REQUESTED until submission.
-      operationId: saveReportDraft
-      parameters: [{$ref: '#/components/parameters/ReportId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportDraftInput'}}}}
-      responses: {'200': {description: Saved report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      description: Draft input replaces the saved draft and attachment selection.
+        reportingPeriodId cannot change. Only DRAFT or REVISION_REQUESTED on an Active
+        owned placement; revision saves keep REVISION_REQUESTED until submission.
+      operationId: patchReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportDraftInput'
+      responses:
+        '200':
+          description: Saved report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /reports/{reportId}/submit:
     post:
-      tags: [Reports]
+      tags:
+      - Reports
       summary: Submit or resubmit a complete report version
       operationId: submitReport
-      parameters: [{$ref: '#/components/parameters/ReportId'}]
-      responses: {'200': {description: Submitted report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      responses:
+        '201':
+          description: Submitted report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /reports/{reportId}/reviews:
     post:
-      tags: [Reports]
-      summary: Approve or request revision of the explicitly identified submitted version
-      description: Lock report and placement; require Active placement, SUBMITTED state and current version matching reportVersionId. Otherwise return 409 REPORT_VERSION_CONFLICT with no review or notification. One review per version; revision feedback must contain non-whitespace text.
+      tags:
+      - Reports
+      summary: Approve or request revision of the explicitly identified submitted
+        version
+      description: Lock report and placement; require Active placement, SUBMITTED
+        state and current version matching reportVersionId. Otherwise return 409 REPORT_VERSION_CONFLICT
+        with no review or notification. One review per version; revision feedback
+        must contain non-whitespace text.
       operationId: reviewReport
-      parameters: [{$ref: '#/components/parameters/ReportId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportReviewInput'}}}}
-      responses: {'200': {description: Reviewed report, content: {application/json: {schema: {$ref: '#/components/schemas/WeeklyReport'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportReviewInput'
+      responses:
+        '201':
+          description: Reviewed report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReport'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /placements/{placementId}/self-assessment:
     get:
-      tags: [Evaluations]
+      tags:
+      - Evaluations
       summary: Get the authorized Student self-assessment
-      operationId: getSelfAssessment
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses: {'200': {description: Self-assessment, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessment'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: getSelf
+      responses:
+        '200':
+          description: Self-assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAssessment'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     put:
-      tags: [Evaluations]
+      tags:
+      - Evaluations
       summary: Save or submit the placement Student's independent self-assessment
-      operationId: upsertSelfAssessment
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessmentInput'}}}}
-      responses: {'200': {description: Saved assessment, content: {application/json: {schema: {$ref: '#/components/schemas/SelfAssessment'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: putSelf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentInput'
+      responses:
+        '200':
+          description: Saved assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfAssessment'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /placements/{placementId}/performance-evaluation:
     get:
-      tags: [Evaluations]
+      tags:
+      - Evaluations
       summary: Get the authorized separate supervisor/Admin performance evaluation
-      operationId: getPerformanceEvaluation
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      responses: {'200': {description: Performance evaluation, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluation'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: getEvaluation
+      responses:
+        '200':
+          description: Performance evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEvaluation'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     put:
-      tags: [Evaluations]
+      tags:
+      - Evaluations
       summary: Save or submit an assigned Supervisor/Admin performance evaluation
-      operationId: upsertPerformanceEvaluation
-      parameters: [{$ref: '#/components/parameters/PlacementId'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluationInput'}}}}
-      responses: {'200': {description: Saved evaluation, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceEvaluation'}}}}, '400': {$ref: '#/components/responses/ValidationError'}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /monitoring:
-    get:
-      tags: [Monitoring]
-      summary: Get the Admin-only, read-only program/term monitoring dashboard
-      operationId: getMonitoring
-      parameters: [{name: programId, in: query, schema: {type: string, format: uuid}}, {name: termId, in: query, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Read-only monitoring data and drill-through references, content: {application/json: {schema: {$ref: '#/components/schemas/MonitoringDashboard'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
-  /notifications:
-    get:
-      tags: [Notifications]
-      summary: List only the current user's in-app notifications
-      operationId: listNotifications
-      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {name: unreadOnly, in: query, schema: {type: boolean, default: false}}]
-      responses: {'200': {description: Notification page, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPage'}}}}}
-  /notifications/mark-read:
-    post:
-      tags: [Notifications]
-      summary: Mark all current-user notifications as read
-      operationId: markAllNotificationsRead
-      responses: {'204': {description: Marked read}}
-  /notifications/{notificationId}/read:
-    post:
-      tags: [Notifications]
-      summary: Mark one current-user notification as read
-      operationId: markNotificationRead
-      parameters: [{$ref: '#/components/parameters/NotificationId'}]
-      responses: {'200': {description: Updated notification, content: {application/json: {schema: {$ref: '#/components/schemas/Notification'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      operationId: putEvaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentInput'
+      responses:
+        '200':
+          description: Saved evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEvaluation'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: placementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
   /ai-jobs:
     post:
-      tags: [AI jobs]
-      summary: Request optional advisory AI explanation or summary
-      description: Student requests own match explanation; assigned Supervisor/Admin requests a specific submitted reportVersionId. Authorize source and persist immutable minimized input in the same consistent database snapshot. Reuse is scoped to requester, kind, source, input fingerprint and prompt version. Polling rechecks current source access.
+      tags:
+      - AI jobs
+      summary: 'Disabled: optional AI worker is not deployed'
+      description: Student requests own match explanation; assigned Supervisor/Admin
+        requests a specific submitted reportVersionId. Authorize source and persist
+        immutable minimized input in the same consistent database snapshot. Reuse
+        is scoped to requester, kind, source, input fingerprint and prompt version.
+        Polling rechecks current source access.
       operationId: createAiJob
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AiJobRequest'}}}}
-      responses: {'202': {description: Durable queued/reused AI job, content: {application/json: {schema: {$ref: '#/components/schemas/AiJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiJobRequest'
+      responses:
+        '503':
+          description: Optional AI disabled
+        '401':
+          description: Unauthenticated
   /ai-jobs/{aiJobId}:
     get:
-      tags: [AI jobs]
-      summary: Poll an authorized optional AI job
+      tags:
+      - AI jobs
+      summary: 'Disabled: optional AI worker is not deployed'
       operationId: getAiJob
-      parameters: [{$ref: '#/components/parameters/AiJobId'}]
-      responses: {'200': {description: Advisory job status/result, content: {application/json: {schema: {$ref: '#/components/schemas/AiJob'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      responses:
+        '503':
+          description: Optional AI disabled
+        '401':
+          description: Unauthenticated
+      parameters:
+      - name: aiJobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /postings/{id}/publish:
+    post:
+      tags:
+      - Postings
+      summary: Validate and publish a Draft posting
+      operationId: publish
+      responses:
+        '201':
+          description: Open posting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Posting'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /postings/{id}/lifecycle:
+    post:
+      tags:
+      - Postings
+      summary: Close or archive an authorized posting
+      operationId: postingLifecycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleInput'
+      responses:
+        '201':
+          description: Updated posting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Posting'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /placements:
+    get:
+      tags:
+      - Placements
+      summary: List placements in the active role's permitted scope
+      operationId: placements
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+  /placements/{id}:
+    get:
+      tags:
+      - Placements
+      summary: Get authorized placement context and role-permitted progress summary
+      operationId: placement
+      responses:
+        '200':
+          description: Placement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /placements/{id}/lifecycle:
+    post:
+      tags:
+      - Placements
+      summary: Complete or terminate an Active placement
+      operationId: placementLifecycle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleInput'
+      responses:
+        '201':
+          description: Updated placement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /placements/{id}/tasks:
+    get:
+      tags:
+      - Placements
+      summary: List tasks for an authorized placement
+      operationId: tasks
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+    post:
+      tags:
+      - Placements
+      summary: Create a task on an Active assigned placement
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '201':
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /placements/{id}/tasks/{taskId}/status:
+    patch:
+      tags:
+      - Placements
+      summary: Update task status as the placement Student
+      operationId: taskStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskStatusInput'
+      responses:
+        '200':
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /notifications:
+    get:
+      tags:
+      - Notifications
+      summary: List only the current user's in-app notifications
+      operationId: notifications
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+  /notifications/{id}/read:
+    post:
+      tags:
+      - Notifications
+      summary: Mark one current-user notification as read
+      operationId: markRead
+      responses:
+        '201':
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /notifications/mark-read:
+    post:
+      tags:
+      - Notifications
+      summary: Mark all current-user notifications as read
+      operationId: markAllRead
+      responses:
+        '201':
+          description: Marked read
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+  /monitoring:
+    get:
+      tags:
+      - Monitoring
+      summary: Get the Admin-only, read-only program/term monitoring dashboard
+      operationId: monitoring
+      responses:
+        '200':
+          description: Read-only monitoring data and drill-through references
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringDashboard'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      parameters:
+      - name: programId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: termId
+        in: query
+        schema:
+          type: string
+          format: uuid
+  /companies/mine:
+    get:
+      summary: companies
+      responses:
+        '200':
+          description: Records. Paged collections return at most pageSize items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Company'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: State conflict
+      operationId: companies
 components:
   securitySchemes:
-    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
-    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
-    PageSize: {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
-    Search: {name: q, in: query, schema: {type: string, maxLength: 200}}
-    CompanyId: {name: companyId, in: path, required: true, schema: {type: string, format: uuid}}
-    PostingId: {name: postingId, in: path, required: true, schema: {type: string, format: uuid}}
-    ApplicationId: {name: applicationId, in: path, required: true, schema: {type: string, format: uuid}}
-    PlacementId: {name: placementId, in: path, required: true, schema: {type: string, format: uuid}}
-    TaskId: {name: taskId, in: path, required: true, schema: {type: string, format: uuid}}
-    ReportId: {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
-    DocumentId: {name: documentId, in: path, required: true, schema: {type: string, format: uuid}}
-    NotificationId: {name: notificationId, in: path, required: true, schema: {type: string, format: uuid}}
-    AiJobId: {name: aiJobId, in: path, required: true, schema: {type: string, format: uuid}}
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Search:
+      name: q
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PostingId:
+      name: postingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PlacementId:
+      name: placementId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AiJobId:
+      name: aiJobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
-    Unauthorized: {description: Authentication is missing or invalid, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-    Forbidden: {description: Active role or record relationship is not authorized, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-    NotFound: {description: Resource does not exist or is not exposed to the caller, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-    Conflict: {description: 'Duplicate resource, invalid lifecycle state, stale assignment/report version, or conflicting acceptance replay', content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-    ValidationError: {description: Request validation failed, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
-    PublishValidationError: {description: Posting remains Draft; missing publish fields are identified, content: {application/problem+json: {schema: {$ref: '#/components/schemas/ValidationProblem'}}}}
+    Unauthorized:
+      description: Authentication is missing or invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Active role or record relationship is not authorized
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource does not exist or is not exposed to the caller
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Duplicate resource, invalid lifecycle state, stale assignment/report
+        version, or conflicting acceptance replay
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+    PublishValidationError:
+      description: Posting remains Draft; missing publish fields are identified
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
   schemas:
-    Role: {type: string, enum: [STUDENT, COMPANY_STAFF, SUPERVISOR, ADMIN]}
-    WorkArrangement: {type: string, enum: [ONSITE, REMOTE, HYBRID]}
-    PostingStatus: {type: string, enum: [DRAFT, OPEN, CLOSED, ARCHIVED]}
-    ApplicationStatus: {type: string, enum: [SUBMITTED, UNDER_REVIEW, INTERVIEW, ACCEPTED, REJECTED, WITHDRAWN]}
-    PlacementStatus: {type: string, enum: [ACTIVE, COMPLETED, TERMINATED]}
-    TaskStatus: {type: string, enum: [TODO, IN_PROGRESS, DONE]}
-    ReportState: {type: string, enum: [DRAFT, SUBMITTED, REVISION_REQUESTED, APPROVED]}
-    AssessmentState: {type: string, enum: [DRAFT, SUBMITTED]}
-    CompletionDecision: {type: string, enum: [PASSED, FAILED, PENDING, INCOMPLETE]}
-    Id: {type: string, format: uuid}
-    Timestamp: {type: string, format: date-time}
-    Date: {type: string, format: date}
+    Role:
+      type: string
+      enum:
+      - STUDENT
+      - COMPANY_STAFF
+      - SUPERVISOR
+      - ADMIN
+    WorkArrangement:
+      type: string
+      enum:
+      - ONSITE
+      - REMOTE
+      - HYBRID
+    PostingStatus:
+      type: string
+      enum:
+      - DRAFT
+      - OPEN
+      - CLOSED
+      - ARCHIVED
+    ApplicationStatus:
+      type: string
+      enum:
+      - SUBMITTED
+      - UNDER_REVIEW
+      - INTERVIEW
+      - ACCEPTED
+      - REJECTED
+      - WITHDRAWN
+    PlacementStatus:
+      type: string
+      enum:
+      - ACTIVE
+      - COMPLETED
+      - TERMINATED
+    TaskStatus:
+      type: string
+      enum:
+      - TODO
+      - IN_PROGRESS
+      - DONE
+    ReportState:
+      type: string
+      enum:
+      - DRAFT
+      - SUBMITTED
+      - REVISION_REQUESTED
+      - APPROVED
+    AssessmentState:
+      type: string
+      enum:
+      - DRAFT
+      - SUBMITTED
+    CompletionDecision:
+      type: string
+      enum:
+      - PASSED
+      - FAILED
+      - PENDING
+      - INCOMPLETE
+    Id:
+      type: string
+      format: uuid
+    Timestamp:
+      type: string
+      format: date-time
+    Date:
+      type: string
+      format: date
     ActiveRoleInput:
       type: object
-      required: [activeRole]
-      properties: {activeRole: {$ref: '#/components/schemas/Role'}}
+      required:
+      - activeRole
+      properties:
+        activeRole:
+          $ref: '#/components/schemas/Role'
     RoleSession:
       type: object
-      required: [me, accessToken, expiresAt]
-      properties: {me: {$ref: '#/components/schemas/Me'}, accessToken: {type: string}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+      required:
+      - me
+      - accessToken
+      - expiresAt
+      properties:
+        me:
+          $ref: '#/components/schemas/Me'
+        accessToken:
+          type: string
+        expiresAt:
+          $ref: '#/components/schemas/Timestamp'
     Supervisor:
       type: object
-      required: [id, fullName]
-      properties: {id: {$ref: '#/components/schemas/Id'}, fullName: {type: string}, department: {type: string}}
+      required:
+      - id
+      - fullName
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        fullName:
+          type: string
+        department:
+          type: string
     SupervisorPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Supervisor'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supervisor'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     AssignmentChangeInput:
       type: object
-      required: [expectedAssignmentId, supervisorUserId, reason]
+      required:
+      - expectedAssignmentId
+      - supervisorUserId
+      - reason
       properties:
-        expectedAssignmentId: {type: string, format: uuid, nullable: true}
-        supervisorUserId: {type: string, format: uuid, nullable: true, description: Null revokes without replacement.}
-        reason: {type: string, minLength: 1, pattern: '\S', maxLength: 2000}
+        expectedAssignmentId:
+          type: string
+          format: uuid
+          nullable: true
+        supervisorUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null revokes without replacement.
+        reason:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 2000
     SupervisorAssignment:
       type: object
-      required: [id, supervisor, assignedAt, assignedByUserId]
+      required:
+      - id
+      - supervisor
+      - assignedAt
+      - assignedByUserId
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        supervisor: {$ref: '#/components/schemas/Supervisor'}
-        assignedAt: {$ref: '#/components/schemas/Timestamp'}
-        assignedByUserId: {$ref: '#/components/schemas/Id'}
-        reason: {type: string}
-        revokedAt: {$ref: '#/components/schemas/Timestamp'}
-        revokedByUserId: {$ref: '#/components/schemas/Id'}
-        revocationReason: {type: string}
+        id:
+          $ref: '#/components/schemas/Id'
+        supervisor:
+          $ref: '#/components/schemas/Supervisor'
+        assignedAt:
+          $ref: '#/components/schemas/Timestamp'
+        assignedByUserId:
+          $ref: '#/components/schemas/Id'
+        reason:
+          type: string
+        revokedAt:
+          $ref: '#/components/schemas/Timestamp'
+        revokedByUserId:
+          $ref: '#/components/schemas/Id'
+        revocationReason:
+          type: string
     ReportingPeriod:
       type: object
-      required: [id, placementId, weekStart, weekEnd, dueAt, timezone, submissionState]
+      required:
+      - id
+      - placementId
+      - weekStart
+      - weekEnd
+      - dueAt
+      - timezone
+      - submissionState
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        placementId: {$ref: '#/components/schemas/Id'}
-        weekStart: {$ref: '#/components/schemas/Date'}
-        weekEnd: {$ref: '#/components/schemas/Date'}
-        dueAt: {$ref: '#/components/schemas/Timestamp'}
-        timezone: {type: string, example: Asia/Ho_Chi_Minh}
-        submissionState: {type: string, enum: [MISSING, DRAFT, SUBMITTED, REVISION_REQUESTED, APPROVED], description: DRAFT is exposed only to owner; other participants see MISSING until first submission.}
-        reportId: {$ref: '#/components/schemas/Id'}
+        id:
+          $ref: '#/components/schemas/Id'
+        placementId:
+          $ref: '#/components/schemas/Id'
+        weekStart:
+          $ref: '#/components/schemas/Date'
+        weekEnd:
+          $ref: '#/components/schemas/Date'
+        dueAt:
+          $ref: '#/components/schemas/Timestamp'
+        timezone:
+          type: string
+          example: Asia/Ho_Chi_Minh
+        submissionState:
+          type: string
+          enum:
+          - MISSING
+          - DRAFT
+          - SUBMITTED
+          - REVISION_REQUESTED
+          - APPROVED
+          description: DRAFT is exposed only to owner; other participants see MISSING
+            until first submission.
+        reportId:
+          $ref: '#/components/schemas/Id'
     Me:
       type: object
-      required: [id, email, fullName, activeRole, roles]
+      required:
+      - id
+      - roles
+      - activeRole
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        email: {type: string, format: email}
-        fullName: {type: string}
-        activeRole: {$ref: '#/components/schemas/Role'}
-        roles: {type: array, items: {$ref: '#/components/schemas/Role'}}
+        id:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        activeRole:
+          $ref: '#/components/schemas/Role'
     StudentProfileInput:
       type: object
-      required: [fullName, contactEmail, university, major]
+      required:
+      - fullName
+      - contactEmail
+      - university
+      - major
       properties:
-        fullName: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        contactEmail: {type: string, format: email}
-        contactPhone: {type: string, maxLength: 40}
-        university: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        major: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        graduationYear: {type: integer, minimum: 2000, maximum: 2200}
-        bio: {type: string, maxLength: 5000}
+        fullName:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        contactEmail:
+          type: string
+          format: email
+        contactPhone:
+          type: string
+          maxLength: 40
+        university:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        major:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        graduationYear:
+          type: integer
+          minimum: 2000
+          maximum: 2200
+        bio:
+          type: string
+          maxLength: 5000
     StudentProfile:
       allOf:
-        - {$ref: '#/components/schemas/StudentProfileInput'}
-        - type: object
-          required: [id]
-          properties: {id: {$ref: '#/components/schemas/Id'}, programId: {$ref: '#/components/schemas/Id'}}
+      - $ref: '#/components/schemas/StudentProfileInput'
+      - type: object
+        required:
+        - id
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
+          programId:
+            $ref: '#/components/schemas/Id'
     SkillSetInput:
       type: object
-      required: [skills]
+      required:
+      - skills
       properties:
-        skills: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/StudentSkillInput'}}
+        skills:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/StudentSkillInput'
     StudentSkillInput:
       type: object
-      required: [name]
-      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 100}, proficiency: {type: string, enum: [BEGINNER, INTERMEDIATE, ADVANCED]}}
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 100
+        proficiency:
+          type: string
+          enum:
+          - BEGINNER
+          - INTERMEDIATE
+          - ADVANCED
+        id:
+          type: string
+          format: uuid
     StudentSkill:
-      description: id is the canonical skills.id; proficiency is omitted when unset. PUT normalizes names, rejects duplicate normalized names and atomically replaces the complete set.
-      allOf: [{$ref: '#/components/schemas/StudentSkillInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
+      description: id is the canonical skills.id; proficiency is omitted when unset.
+        PUT normalizes names, rejects duplicate normalized names and atomically replaces
+        the complete set.
+      allOf:
+      - $ref: '#/components/schemas/StudentSkillInput'
+      - type: object
+        required:
+        - id
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
     Preferences:
       type: object
       properties:
-        industries: {type: array, items: {type: string}}
-        locations: {type: array, items: {type: string}}
-        workArrangements: {type: array, items: {$ref: '#/components/schemas/WorkArrangement'}}
-        minDurationWeeks: {type: integer, minimum: 1}
-        maxDurationWeeks: {type: integer, minimum: 1}
+        industries:
+          type: array
+          items:
+            type: string
+        locations:
+          type: array
+          items:
+            type: string
+        workArrangements:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkArrangement'
+        minDurationWeeks:
+          type: integer
+          minimum: 1
+        maxDurationWeeks:
+          type: integer
+          minimum: 1
     DocumentUploadRequest:
       type: object
-      required: [fileName, contentType, sizeBytes, sha256, kind]
+      required:
+      - fileName
+      - contentType
+      - sizeBytes
+      - sha256
+      - kind
       properties:
-        fileName: {type: string, maxLength: 255}
-        contentType: {type: string, enum: [application/pdf, image/jpeg, image/png, application/vnd.openxmlformats-officedocument.wordprocessingml.document]}
-        sizeBytes: {type: integer, format: int64, minimum: 1, maximum: 10485760}
-        sha256: {type: string, pattern: '^[A-Fa-f0-9]{64}$'}
-        kind: {type: string, enum: [CV, PORTFOLIO, TRANSCRIPT, OTHER]}
+        fileName:
+          type: string
+          maxLength: 255
+        contentType:
+          type: string
+          enum:
+          - application/pdf
+          - image/jpeg
+          - image/png
+          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 10485760
+        sha256:
+          type: string
+          pattern: ^[A-Fa-f0-9]{64}$
+        kind:
+          type: string
+          enum:
+          - CV
+          - PORTFOLIO
+          - TRANSCRIPT
+          - OTHER
     DocumentUpload:
       type: object
-      required: [document, uploadUrl, expiresAt]
-      properties: {document: {$ref: '#/components/schemas/Document'}, uploadUrl: {type: string, format: uri, description: Absolute same-origin API content URL with transferToken; PUT using bearer authentication. Never a storage URL.}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+      required:
+      - document
+      - uploadUrl
+      - expiresAt
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        uploadUrl:
+          type: string
+          description: API-relative content URL; resolve against API origin and send
+            bearer authentication. Five-minute expiry.
+        expiresAt:
+          $ref: '#/components/schemas/Timestamp'
     DownloadUrl:
       type: object
-      required: [url, expiresAt]
-      properties: {url: {type: string, format: uri, description: Absolute same-origin API content URL with transferToken; GET using bearer authentication. Expires in five minutes.}, expiresAt: {$ref: '#/components/schemas/Timestamp'}}
+      required:
+      - url
+      - expiresAt
+      properties:
+        url:
+          type: string
+          description: API-relative content URL; resolve against API origin and send
+            bearer authentication. Five-minute expiry.
+        expiresAt:
+          $ref: '#/components/schemas/Timestamp'
     Document:
       type: object
-      required: [id, fileName, contentType, sizeBytes, state, createdAt]
+      required:
+      - id
+      - originalName
+      - contentType
+      - sizeBytes
+      - state
+      - createdAt
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        fileName: {type: string}
-        contentType: {type: string}
-        sizeBytes: {type: integer, format: int64}
-        state: {type: string, enum: [PENDING, AVAILABLE, REJECTED, DELETED]}
-        kind: {type: string, enum: [CV, PORTFOLIO, TRANSCRIPT, OTHER]}
-        createdAt: {$ref: '#/components/schemas/Timestamp'}
+        id:
+          $ref: '#/components/schemas/Id'
+        contentType:
+          type: string
+        sizeBytes:
+          type: string
+          pattern: ^[0-9]+$
+        state:
+          type: string
+          enum:
+          - PENDING
+          - AVAILABLE
+          - REJECTED
+          - DELETED
+        kind:
+          type: string
+          enum:
+          - CV
+          - PORTFOLIO
+          - TRANSCRIPT
+          - OTHER
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        originalName:
+          type: string
     DocumentList:
       type: object
-      required: [items]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Document'}}}
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
     CompanyInput:
       type: object
-      required: [name]
-      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 200}, website: {type: string, format: uri}, industry: {type: string}, description: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}}
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        website:
+          type: string
+          format: uri
+        industry:
+          type: string
+        description:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 10000
     Company:
-      allOf: [{$ref: '#/components/schemas/CompanyInput'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/Id'}}}]
+      allOf:
+      - $ref: '#/components/schemas/CompanyInput'
+      - type: object
+        required:
+        - id
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
     CompanyPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Company'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Company'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     PostingSkillInput:
       type: object
-      required: [name, importance]
-      properties: {name: {type: string, minLength: 1, pattern: '\S', maxLength: 100}, importance: {type: string, enum: [REQUIRED, OPTIONAL]}}
+      required:
+      - name
+      - importance
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 100
+        importance:
+          type: string
+          enum:
+          - REQUIRED
+          - OPTIONAL
     PostingInput:
       type: object
-      required: [companyId, title]
+      required:
+      - companyId
+      - title
+      - description
+      - workArrangement
+      - durationWeeks
+      - openings
+      - applicationDeadline
       properties:
-        companyId: {$ref: '#/components/schemas/Id'}
-        termId: {$ref: '#/components/schemas/Id'}
-        title: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        description: {type: string, minLength: 1, pattern: '\S', maxLength: 20000}
-        category: {type: string}
-        location: {type: string}
-        workArrangement: {$ref: '#/components/schemas/WorkArrangement'}
-        durationWeeks: {type: integer, minimum: 1}
-        openings: {type: integer, minimum: 1}
-        applicationDeadline: {$ref: '#/components/schemas/Date'}
-        responsibilities: {type: string, maxLength: 20000}
-        benefits: {type: string, maxLength: 20000}
-        skills: {type: array, description: Explicit declaration of both importance groups; empty array is allowed. Omission on a new draft leaves skills undeclared and fails publish; omission on edit preserves the prior declaration., items: {$ref: '#/components/schemas/PostingSkillInput'}}
+        companyId: &id001
+          $ref: '#/components/schemas/Id'
+        termId: &id002
+          type: string
+          format: uuid
+        title: &id003
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        description: &id004
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 20000
+        category: &id005
+          type: string
+        location: &id006
+          type: string
+        workArrangement: &id007
+          $ref: '#/components/schemas/WorkArrangement'
+        durationWeeks: &id008
+          type: integer
+          minimum: 1
+        openings: &id009
+          type: integer
+          minimum: 1
+        applicationDeadline: &id010
+          $ref: '#/components/schemas/Date'
+        skills: &id011
+          type: array
+          description: Explicit declaration of both importance groups; empty array
+            is allowed. Omission on a new draft leaves skills undeclared and fails
+            publish; omission on edit preserves the prior declaration.
+          items:
+            $ref: '#/components/schemas/PostingSkillInput'
+        deadlineTimezone:
+          type: string
+          description: Accepted for compatibility; server resolves timezone from academic
+            term or fallback.
     MatchScore:
-      description: skill-v1 weighted presence score as specified in design/behavior-rules.md; zero denominator produces 0 with NO_POSTING_SKILLS.
+      description: skill-v1 weighted presence score as specified in design/behavior-rules.md;
+        zero denominator produces 0 with NO_POSTING_SKILLS.
       type: object
-      required: [score, matchedSkills, missingSkills, calculationVersion, advisory, reason]
+      required:
+      - score
+      - matchedSkills
+      - missingSkills
+      - calculationVersion
+      - advisory
+      - reason
       properties:
-        score: {type: integer, minimum: 0, maximum: 100}
-        matchedSkills: {type: array, items: {type: string}}
-        missingSkills: {type: array, items: {type: string}}
-        calculationVersion: {type: string, enum: [skill-v1]}
-        reason: {type: string, enum: [SKILL_OVERLAP, NO_POSTING_SKILLS]}
-        advisory: {type: boolean, enum: [true]}
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        matchedSkills:
+          type: array
+          items:
+            type: string
+        missingSkills:
+          type: array
+          items:
+            type: string
+        calculationVersion:
+          type: string
+          enum:
+          - skill-v1
+        reason:
+          type: string
+          enum:
+          - SKILL_OVERLAP
+          - NO_POSTING_SKILLS
+        advisory:
+          type: boolean
+          enum:
+          - true
     Posting:
-      allOf:
-        - {$ref: '#/components/schemas/PostingInput'}
-        - type: object
-          required: [id, company, status, eligible, openings, createdAt]
-          properties:
-            id: {$ref: '#/components/schemas/Id'}
-            company: {$ref: '#/components/schemas/Company'}
-            status: {$ref: '#/components/schemas/PostingStatus'}
-            eligible: {type: boolean, description: Derived from Open status and deadline; never an AI outcome.}
-            publishedAt: {$ref: '#/components/schemas/Timestamp'}
-            createdAt: {$ref: '#/components/schemas/Timestamp'}
-            isSaved: {type: boolean}
-            hasApplied: {type: boolean}
-            matchScore: {$ref: '#/components/schemas/MatchScore'}
+      type: object
+      required:
+      - id
+      - companyId
+      - title
+      - description
+      - status
+      - skills
+      properties:
+        companyId: *id001
+        termId: *id002
+        title: *id003
+        description: *id004
+        category: *id005
+        location: *id006
+        workArrangement: *id007
+        durationWeeks: *id008
+        openings: *id009
+        applicationDeadline: *id010
+        responsibilities:
+          type: string
+          maxLength: 20000
+        benefits:
+          type: string
+          maxLength: 20000
+        skills: *id011
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/PostingStatus'
+        match:
+          $ref: '#/components/schemas/MatchScore'
     PostingPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Posting'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Posting'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     PostingLifecycleInput:
       type: object
-      required: [targetStatus]
-      properties: {targetStatus: {type: string, enum: [CLOSED, ARCHIVED]}, note: {type: string, maxLength: 2000}}
+      required:
+      - targetStatus
+      properties:
+        targetStatus:
+          type: string
+          enum:
+          - CLOSED
+          - ARCHIVED
+        note:
+          type: string
+          maxLength: 2000
     ApplicationInput:
       type: object
-      required: [postingId, contactName, contactEmail, university, major, availability, coverNote, cvDocumentId]
+      required:
+      - postingId
+      - contactName
+      - contactEmail
+      - university
+      - major
+      - availability
+      - coverNote
+      - cvDocumentId
       properties:
-        postingId: {$ref: '#/components/schemas/Id'}
-        contactName: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        contactEmail: {type: string, format: email}
-        contactPhone: {type: string, maxLength: 40}
-        university: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        major: {type: string, minLength: 1, pattern: '\S', maxLength: 200}
-        graduationYear: {type: integer}
-        availability: {type: string, minLength: 1, pattern: '\S', maxLength: 4000}
-        coverNote: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}
-        cvDocumentId: {$ref: '#/components/schemas/Id'}
-        additionalDocumentIds: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}
+        postingId: &id012
+          $ref: '#/components/schemas/Id'
+        contactName:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        contactEmail:
+          type: string
+          format: email
+        contactPhone:
+          type: string
+          maxLength: 40
+        university:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        major:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        graduationYear:
+          type: integer
+        availability:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 4000
+        coverNote: &id013
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 10000
+        cvDocumentId:
+          $ref: '#/components/schemas/Id'
+        supportingDocumentIds:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/Id'
     StatusHistoryEntry:
       type: object
-      required: [id, toStatus, actorName, changedAt]
-      properties: {id: {$ref: '#/components/schemas/Id'}, fromStatus: {$ref: '#/components/schemas/ApplicationStatus'}, toStatus: {$ref: '#/components/schemas/ApplicationStatus'}, actorName: {type: string}, note: {type: string}, changedAt: {$ref: '#/components/schemas/Timestamp'}}
+      required:
+      - id
+      - toStatus
+      - actorName
+      - changedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        fromStatus:
+          $ref: '#/components/schemas/ApplicationStatus'
+        toStatus:
+          $ref: '#/components/schemas/ApplicationStatus'
+        actorName:
+          type: string
+        note:
+          type: string
+        changedAt:
+          $ref: '#/components/schemas/Timestamp'
     Application:
-      allOf:
-        - {$ref: '#/components/schemas/ApplicationInput'}
-        - type: object
-          required: [id, status, submittedAt, history]
-          properties:
-            id: {$ref: '#/components/schemas/Id'}
-            status: {$ref: '#/components/schemas/ApplicationStatus'}
-            submittedAt: {$ref: '#/components/schemas/Timestamp'}
-            posting: {$ref: '#/components/schemas/Posting'}
-            documents: {type: array, items: {$ref: '#/components/schemas/Document'}}
-            history: {type: array, items: {$ref: '#/components/schemas/StatusHistoryEntry'}}
-            placementId: {$ref: '#/components/schemas/Id'}
+      type: object
+      properties:
+        postingId: *id012
+        contactName:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+        university:
+          type: string
+        major:
+          type: string
+        graduationYear:
+          type: integer
+        availability:
+          type: string
+        coverNote: *id013
+        cvDocumentId:
+          type: string
+          format: uuid
+        id:
+          $ref: '#/components/schemas/Id'
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        submittedAt:
+          $ref: '#/components/schemas/Timestamp'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusHistoryEntry'
+        studentId:
+          type: string
+      required:
+      - id
+      - studentId
+      - postingId
+      - status
+      - coverNote
+      - submittedAt
     ApplicationPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Application'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     ApplicationStatusTransitionInput:
       oneOf:
-        - type: object
-          required: [targetStatus]
-          properties: {targetStatus: {type: string, enum: [UNDER_REVIEW, INTERVIEW, REJECTED]}, note: {type: string, maxLength: 4000}}
-        - type: object
-          required: [targetStatus, supervisorUserId, startDate, endDate]
-          properties: {targetStatus: {type: string, enum: [ACCEPTED]}, note: {type: string, maxLength: 4000}, supervisorUserId: {$ref: '#/components/schemas/Id'}, startDate: {$ref: '#/components/schemas/Date'}, endDate: {$ref: '#/components/schemas/Date'}}
-    NoteInput: {type: object, properties: {note: {type: string, maxLength: 4000}}}
+      - type: object
+        required:
+        - targetStatus
+        properties:
+          targetStatus:
+            type: string
+            enum:
+            - UNDER_REVIEW
+            - INTERVIEW
+            - REJECTED
+          note:
+            type: string
+            maxLength: 4000
+      - type: object
+        required:
+        - targetStatus
+        - supervisorUserId
+        - startDate
+        - endDate
+        properties:
+          targetStatus:
+            type: string
+            enum:
+            - ACCEPTED
+          note:
+            type: string
+            maxLength: 4000
+          supervisorUserId:
+            $ref: '#/components/schemas/Id'
+          startDate:
+            $ref: '#/components/schemas/Date'
+          endDate:
+            $ref: '#/components/schemas/Date'
+    NoteInput:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 4000
     Placement:
       type: object
-      required: [id, applicationId, studentId, postingId, companyId, status, startDate, endDate, reportingTimezone, studentName, postingTitle, companyName]
+      required:
+      - id
+      - applicationId
+      - studentId
+      - postingId
+      - companyId
+      - status
+      - startDate
+      - endDate
+      - reportingTimezone
+      - studentName
+      - postingTitle
+      - companyName
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        applicationId: {$ref: '#/components/schemas/Id'}
-        studentId: {$ref: '#/components/schemas/Id'}
-        postingId: {$ref: '#/components/schemas/Id'}
-        companyId: {$ref: '#/components/schemas/Id'}
-        termId: {$ref: '#/components/schemas/Id'}
-        status: {$ref: '#/components/schemas/PlacementStatus'}
-        startDate: {$ref: '#/components/schemas/Date'}
-        endDate: {$ref: '#/components/schemas/Date'}
-        supervisor: {$ref: '#/components/schemas/Supervisor'}
-        activeAssignmentId: {$ref: '#/components/schemas/Id'}
-        reportingTimezone: {type: string}
-        studentName: {type: string}
-        postingTitle: {type: string}
-        companyName: {type: string}
-        taskSummary: {type: object, additionalProperties: {type: integer}}
-        reportSummary: {type: object, additionalProperties: {type: integer}}
+        id:
+          $ref: '#/components/schemas/Id'
+        applicationId:
+          $ref: '#/components/schemas/Id'
+        studentId:
+          $ref: '#/components/schemas/Id'
+        postingId:
+          $ref: '#/components/schemas/Id'
+        companyId:
+          $ref: '#/components/schemas/Id'
+        termId:
+          $ref: '#/components/schemas/Id'
+        status:
+          $ref: '#/components/schemas/PlacementStatus'
+        startDate:
+          $ref: '#/components/schemas/Date'
+        endDate:
+          $ref: '#/components/schemas/Date'
+        supervisor:
+          $ref: '#/components/schemas/Supervisor'
+        activeAssignmentId:
+          $ref: '#/components/schemas/Id'
+        reportingTimezone:
+          type: string
+        studentName:
+          type: string
+        postingTitle:
+          type: string
+        companyName:
+          type: string
+        taskSummary:
+          type: object
+          additionalProperties:
+            type: integer
+        reportSummary:
+          type: object
+          additionalProperties:
+            type: integer
     PlacementPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Placement'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Placement'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     PlacementLifecycleInput:
       type: object
-      required: [targetStatus]
-      properties: {targetStatus: {type: string, enum: [COMPLETED, TERMINATED]}, note: {type: string, maxLength: 4000}}
+      required:
+      - targetStatus
+      properties:
+        targetStatus:
+          type: string
+          enum:
+          - COMPLETED
+          - TERMINATED
+        note:
+          type: string
+          maxLength: 4000
     TaskInput:
       type: object
-      required: [title, description, priority]
-      properties: {title: {type: string, minLength: 1, pattern: '\S', maxLength: 200}, description: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}, priority: {type: string, enum: [LOW, MEDIUM, HIGH]}, dueDate: {$ref: '#/components/schemas/Date'}}
-    TaskStatusInput: {type: object, required: [status], properties: {status: {$ref: '#/components/schemas/TaskStatus'}}}
-    Task:
-      allOf:
-        - {$ref: '#/components/schemas/TaskInput'}
-        - type: object
-          required: [id, status, overdue, createdAt]
-          properties: {id: {$ref: '#/components/schemas/Id'}, status: {$ref: '#/components/schemas/TaskStatus'}, overdue: {type: boolean, description: 'Derived, never inferred progress.'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, updatedAt: {$ref: '#/components/schemas/Timestamp'}}
-    ReportDraftInput:
+      required:
+      - title
+      - description
+      - priority
+      properties:
+        title:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 200
+        description:
+          type: string
+          minLength: 1
+          pattern: \S
+          maxLength: 10000
+        priority:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+        dueDate:
+          $ref: '#/components/schemas/Date'
+    TaskStatusInput:
       type: object
-      required: [reportingPeriodId]
+      required:
+      - status
       additionalProperties: false
       properties:
-        reportingPeriodId: {$ref: '#/components/schemas/Id'}
-        accomplishments: {type: string, maxLength: 20000}
-        challenges: {type: string, maxLength: 20000}
-        nextWeekPlan: {type: string, maxLength: 20000}
-        attachmentDocumentIds: {type: array, uniqueItems: true, maxItems: 10, items: {$ref: '#/components/schemas/Id'}}
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+    Task:
+      allOf:
+      - $ref: '#/components/schemas/TaskInput'
+      - type: object
+        required:
+        - id
+        - status
+        - overdue
+        - createdAt
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
+          status:
+            $ref: '#/components/schemas/TaskStatus'
+          overdue:
+            type: boolean
+            description: Derived, never inferred progress.
+          createdAt:
+            $ref: '#/components/schemas/Timestamp'
+          updatedAt:
+            $ref: '#/components/schemas/Timestamp'
+    ReportDraftInput:
+      type: object
+      required:
+      - accomplishments
+      - challenges
+      - nextWeekPlan
+      additionalProperties: false
+      properties:
+        reportingPeriodId:
+          $ref: '#/components/schemas/Id'
+        accomplishments:
+          type: string
+          maxLength: 20000
+        challenges:
+          type: string
+          maxLength: 20000
+        nextWeekPlan:
+          type: string
+          maxLength: 20000
+        attachmentDocumentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/Id'
     ReportVersion:
       type: object
-      required: [id, versionNo, accomplishments, challenges, nextWeekPlan, submittedAt]
-      properties: {id: {$ref: '#/components/schemas/Id'}, versionNo: {type: integer, minimum: 1}, accomplishments: {type: string}, challenges: {type: string}, nextWeekPlan: {type: string}, attachments: {type: array, items: {$ref: '#/components/schemas/Document'}}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}
+      required:
+      - id
+      - versionNo
+      - accomplishments
+      - challenges
+      - nextWeekPlan
+      - submittedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        versionNo:
+          type: integer
+          minimum: 1
+        accomplishments:
+          type: string
+        challenges:
+          type: string
+        nextWeekPlan:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        submittedAt:
+          $ref: '#/components/schemas/Timestamp'
     ReportReviewInput:
       oneOf:
-        - type: object
-          required: [reportVersionId, outcome]
-          properties: {reportVersionId: {$ref: '#/components/schemas/Id'}, outcome: {type: string, enum: [APPROVED]}, feedback: {type: string, maxLength: 10000}}
-        - type: object
-          required: [reportVersionId, outcome, feedback]
-          properties: {reportVersionId: {$ref: '#/components/schemas/Id'}, outcome: {type: string, enum: [REVISION_REQUESTED]}, feedback: {type: string, minLength: 1, pattern: '\S', maxLength: 10000}}
+      - type: object
+        required:
+        - reportVersionId
+        - outcome
+        properties:
+          reportVersionId:
+            $ref: '#/components/schemas/Id'
+          outcome:
+            type: string
+            enum:
+            - APPROVED
+          feedback:
+            type: string
+            maxLength: 10000
+      - type: object
+        required:
+        - reportVersionId
+        - outcome
+        - feedback
+        properties:
+          reportVersionId:
+            $ref: '#/components/schemas/Id'
+          outcome:
+            type: string
+            enum:
+            - REVISION_REQUESTED
+          feedback:
+            type: string
+            minLength: 1
+            pattern: \S
+            maxLength: 10000
     ReportReview:
-      allOf: [{$ref: '#/components/schemas/ReportReviewInput'}, {type: object, required: [id, reviewedAt, reviewerName], properties: {id: {$ref: '#/components/schemas/Id'}, reviewedAt: {$ref: '#/components/schemas/Timestamp'}, reviewerName: {type: string}}}]
+      allOf:
+      - $ref: '#/components/schemas/ReportReviewInput'
+      - type: object
+        required:
+        - id
+        - reviewedAt
+        - reviewerName
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
+          reviewedAt:
+            $ref: '#/components/schemas/Timestamp'
+          reviewerName:
+            type: string
     WeeklyReport:
       type: object
       additionalProperties: false
-      description: Owning Student alone receives draft. Other participants see only submitted versions/reviews, never draft fields or attachments, including during revision. Reports without a submitted version are omitted from their lists and return 404 on detail, including for Admin. draft is omitted in SUBMITTED/APPROVED. reportVersionId joins each review to its immutable version.
-      required: [id, placementId, reportingPeriodId, weekStart, weekEnd, dueAt, state, currentVersionNo, versions, reviews]
+      description: Owning Student alone receives draft. Other participants see only
+        submitted versions/reviews, never draft fields or attachments, including during
+        revision. Reports without a submitted version are omitted from their lists
+        and return 404 on detail, including for Admin. draft is omitted in SUBMITTED/APPROVED.
+        reportVersionId joins each review to its immutable version.
+      required:
+      - id
+      - placementId
+      - reportingPeriodId
+      - weekStart
+      - weekEnd
+      - dueAt
+      - state
+      - currentVersionNo
+      - versions
+      - reviews
       properties:
-        id: {$ref: '#/components/schemas/Id'}
-        placementId: {$ref: '#/components/schemas/Id'}
-        reportingPeriodId: {$ref: '#/components/schemas/Id'}
-        weekStart: {$ref: '#/components/schemas/Date'}
-        weekEnd: {$ref: '#/components/schemas/Date'}
-        dueAt: {$ref: '#/components/schemas/Timestamp'}
-        state: {$ref: '#/components/schemas/ReportState'}
-        currentVersionNo: {type: integer, minimum: 0}
-        draft: {$ref: '#/components/schemas/ReportDraftInput'}
-        versions: {type: array, items: {$ref: '#/components/schemas/ReportVersion'}}
-        reviews: {type: array, items: {$ref: '#/components/schemas/ReportReview'}}
+        id:
+          $ref: '#/components/schemas/Id'
+        placementId:
+          $ref: '#/components/schemas/Id'
+        reportingPeriodId:
+          $ref: '#/components/schemas/Id'
+        weekStart:
+          $ref: '#/components/schemas/Date'
+        weekEnd:
+          $ref: '#/components/schemas/Date'
+        dueAt:
+          $ref: '#/components/schemas/Timestamp'
+        state:
+          $ref: '#/components/schemas/ReportState'
+        currentVersionNo:
+          type: integer
+          minimum: 0
+        draft:
+          $ref: '#/components/schemas/ReportDraftInput'
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportVersion'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportReview'
     SelfAssessmentInput:
       oneOf:
-        - type: object
-          required: [status]
-          properties: {status: {type: string, enum: [DRAFT]}, ratings: {type: object, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, reflection: {type: string, maxLength: 20000}, learningOutcomes: {type: string, maxLength: 20000}}
-        - type: object
-          required: [status, ratings, reflection, learningOutcomes]
-          properties: {status: {type: string, enum: [SUBMITTED]}, ratings: {type: object, minProperties: 1, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, reflection: {type: string, minLength: 1, maxLength: 20000}, learningOutcomes: {type: string, minLength: 1, maxLength: 20000}}
+      - type: object
+        required:
+        - status
+        properties:
+          status:
+            type: string
+            enum:
+            - DRAFT
+          ratings:
+            type: object
+            additionalProperties:
+              type: integer
+              minimum: 1
+              maximum: 5
+          reflection:
+            type: string
+            maxLength: 20000
+          learningOutcomes:
+            type: string
+            maxLength: 20000
+      - type: object
+        required:
+        - status
+        - ratings
+        - reflection
+        - learningOutcomes
+        properties:
+          status:
+            type: string
+            enum:
+            - SUBMITTED
+          ratings:
+            type: object
+            minProperties: 1
+            additionalProperties:
+              type: integer
+              minimum: 1
+              maximum: 5
+          reflection:
+            type: string
+            minLength: 1
+            maxLength: 20000
+          learningOutcomes:
+            type: string
+            minLength: 1
+            maxLength: 20000
     SelfAssessment:
-      allOf: [{$ref: '#/components/schemas/SelfAssessmentInput'}, {type: object, required: [id, placementId], properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}}]
+      allOf:
+      - $ref: '#/components/schemas/SelfAssessmentInput'
+      - type: object
+        required:
+        - id
+        - placementId
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
+          placementId:
+            $ref: '#/components/schemas/Id'
+          submittedAt:
+            $ref: '#/components/schemas/Timestamp'
     PerformanceEvaluationInput:
       oneOf:
-        - type: object
-          required: [status, completionDecision]
-          properties: {status: {type: string, enum: [DRAFT]}, ratings: {type: object, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, comments: {type: string, maxLength: 20000}, completionDecision: {$ref: '#/components/schemas/CompletionDecision'}}
-        - type: object
-          required: [status, ratings, completionDecision]
-          properties: {status: {type: string, enum: [SUBMITTED]}, ratings: {type: object, minProperties: 1, additionalProperties: {type: integer, minimum: 1, maximum: 5}}, comments: {type: string, maxLength: 20000}, completionDecision: {$ref: '#/components/schemas/CompletionDecision'}}
+      - type: object
+        required:
+        - status
+        - completionDecision
+        properties:
+          status:
+            type: string
+            enum:
+            - DRAFT
+          ratings:
+            type: object
+            additionalProperties:
+              type: integer
+              minimum: 1
+              maximum: 5
+          comments:
+            type: string
+            maxLength: 20000
+          completionDecision:
+            $ref: '#/components/schemas/CompletionDecision'
+      - type: object
+        required:
+        - status
+        - ratings
+        - completionDecision
+        properties:
+          status:
+            type: string
+            enum:
+            - SUBMITTED
+          ratings:
+            type: object
+            minProperties: 1
+            additionalProperties:
+              type: integer
+              minimum: 1
+              maximum: 5
+          comments:
+            type: string
+            maxLength: 20000
+          completionDecision:
+            $ref: '#/components/schemas/CompletionDecision'
     PerformanceEvaluation:
-      allOf: [{$ref: '#/components/schemas/PerformanceEvaluationInput'}, {type: object, required: [id, placementId, authorName], properties: {id: {$ref: '#/components/schemas/Id'}, placementId: {$ref: '#/components/schemas/Id'}, authorName: {type: string}, submittedAt: {$ref: '#/components/schemas/Timestamp'}}}]
+      allOf:
+      - $ref: '#/components/schemas/PerformanceEvaluationInput'
+      - type: object
+        required:
+        - id
+        - placementId
+        - authorName
+        properties:
+          id:
+            $ref: '#/components/schemas/Id'
+          placementId:
+            $ref: '#/components/schemas/Id'
+          authorName:
+            type: string
+          submittedAt:
+            $ref: '#/components/schemas/Timestamp'
     MonitoringDashboard:
       type: object
-      required: [scope, applications, placements, tasks, reports, deadlines, recentActivity, readOnly]
+      required:
+      - scope
+      - applications
+      - placements
+      - tasks
+      - reports
+      - deadlines
+      - recentActivity
+      - readOnly
       properties:
-        scope: {type: object, properties: {programId: {$ref: '#/components/schemas/Id'}, termId: {$ref: '#/components/schemas/Id'}}}
-        applications: {type: object, additionalProperties: {type: integer}}
-        placements: {type: object, additionalProperties: {type: integer}}
-        tasks: {type: object, additionalProperties: {type: integer}}
-        reports: {type: object, additionalProperties: {type: integer}}
-        deadlines: {type: array, items: {$ref: '#/components/schemas/Deadline'}}
-        recentActivity: {type: array, items: {$ref: '#/components/schemas/Activity'}}
-        readOnly: {type: boolean, enum: [true]}
-    Deadline: {type: object, required: [kind, dueDate, dueAt, timezone, target], properties: {kind: {type: string, enum: [APPLICATION, REPORT]}, dueAt: {$ref: '#/components/schemas/Timestamp'}, timezone: {type: string}, reportingPeriodId: {$ref: '#/components/schemas/Id'}, dueDate: {$ref: '#/components/schemas/Date'}, target: {$ref: '#/components/schemas/Target'}}}
-    Activity: {type: object, required: [type, occurredAt, target], properties: {type: {type: string}, occurredAt: {$ref: '#/components/schemas/Timestamp'}, target: {$ref: '#/components/schemas/Target'}}}
-    Target: {type: object, properties: {reportingPeriodId: {$ref: '#/components/schemas/Id'}, type: {type: string, enum: [POSTING, APPLICATION, PLACEMENT, REPORT]}, id: {$ref: '#/components/schemas/Id'}, label: {type: string}}}
+        scope:
+          type: object
+          properties:
+            programId:
+              $ref: '#/components/schemas/Id'
+            termId:
+              $ref: '#/components/schemas/Id'
+        applications:
+          type: object
+          additionalProperties:
+            type: integer
+        placements:
+          type: object
+          additionalProperties:
+            type: integer
+        tasks:
+          type: object
+          additionalProperties:
+            type: integer
+        reports:
+          type: object
+          additionalProperties:
+            type: integer
+        deadlines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Deadline'
+        recentActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        readOnly:
+          type: boolean
+          enum:
+          - true
+    Deadline:
+      type: object
+      required:
+      - kind
+      - dueDate
+      - dueAt
+      - timezone
+      - target
+      properties:
+        kind:
+          type: string
+          enum:
+          - APPLICATION
+          - REPORT
+        dueAt:
+          $ref: '#/components/schemas/Timestamp'
+        timezone:
+          type: string
+        reportingPeriodId:
+          $ref: '#/components/schemas/Id'
+        dueDate:
+          $ref: '#/components/schemas/Date'
+        target:
+          $ref: '#/components/schemas/Target'
+    Activity:
+      type: object
+      required:
+      - type
+      - occurredAt
+      - target
+      properties:
+        type:
+          type: string
+        occurredAt:
+          $ref: '#/components/schemas/Timestamp'
+        target:
+          $ref: '#/components/schemas/Target'
+    Target:
+      type: object
+      properties:
+        reportingPeriodId:
+          $ref: '#/components/schemas/Id'
+        type:
+          type: string
+          enum:
+          - POSTING
+          - APPLICATION
+          - PLACEMENT
+          - REPORT
+        id:
+          $ref: '#/components/schemas/Id'
+        label:
+          type: string
     Notification:
       type: object
-      required: [id, type, title, createdAt, read]
-      properties: {id: {$ref: '#/components/schemas/Id'}, type: {type: string, enum: [APPLICATION_STATUS_CHANGED, TASK_ASSIGNED, REPORT_FEEDBACK, REPORT_REVISION_REQUESTED, DEADLINE]}, title: {type: string}, body: {type: string}, target: {$ref: '#/components/schemas/Target'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, read: {type: boolean}}
+      required:
+      - id
+      - title
+      - type
+      - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        type:
+          type: string
+          enum:
+          - APPLICATION_STATUS_CHANGED
+          - TASK_ASSIGNED
+          - REPORT_FEEDBACK
+          - REPORT_REVISION_REQUESTED
+          - DEADLINE
+        title:
+          type: string
+        body:
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        targetType:
+          type: string
+        targetId:
+          type: string
     NotificationPage:
       type: object
-      required: [items, page, pageSize, total]
-      properties: {items: {type: array, items: {$ref: '#/components/schemas/Notification'}}, page: {type: integer}, pageSize: {type: integer}, total: {type: integer}}
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
     AiJobRequest:
       oneOf:
-        - type: object
-          required: [kind, postingId]
-          properties: {kind: {type: string, enum: [MATCH_EXPLANATION]}, postingId: {$ref: '#/components/schemas/Id'}}
-        - type: object
-          required: [kind, reportVersionId]
-          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}, reportVersionId: {$ref: '#/components/schemas/Id'}}
+      - type: object
+        required:
+        - kind
+        - postingId
+        properties:
+          kind:
+            type: string
+            enum:
+            - MATCH_EXPLANATION
+          postingId:
+            $ref: '#/components/schemas/Id'
+      - type: object
+        required:
+        - kind
+        - reportVersionId
+        properties:
+          kind:
+            type: string
+            enum:
+            - REPORT_SUMMARY
+          reportVersionId:
+            $ref: '#/components/schemas/Id'
     AiJob:
       type: object
-      description: Match jobs require postingId, calculationVersion and sourceChanged; report jobs require reportVersionId. sourceChanged is recalculated by the API on reads by comparing current authorized match input with the retained snapshot; the worker still uses the original snapshot.
-      required: [id, kind, status, advisory, createdAt, inputFingerprint, promptVersion]
+      description: Match jobs require postingId, calculationVersion and sourceChanged;
+        report jobs require reportVersionId. sourceChanged is recalculated by the
+        API on reads by comparing current authorized match input with the retained
+        snapshot; the worker still uses the original snapshot.
+      required:
+      - id
+      - kind
+      - status
+      - advisory
+      - createdAt
+      - inputFingerprint
+      - promptVersion
       oneOf:
-        - type: object
-          required: [postingId, calculationVersion, sourceChanged]
-          properties: {kind: {type: string, enum: [MATCH_EXPLANATION]}}
-        - type: object
-          required: [reportVersionId]
-          properties: {kind: {type: string, enum: [REPORT_SUMMARY]}}
-      properties: {id: {$ref: '#/components/schemas/Id'}, inputFingerprint: {type: string}, promptVersion: {type: string}, postingId: {$ref: '#/components/schemas/Id'}, reportVersionId: {$ref: '#/components/schemas/Id'}, calculationVersion: {type: string}, sourceChanged: {type: boolean}, kind: {type: string, enum: [MATCH_EXPLANATION, REPORT_SUMMARY]}, status: {type: string, enum: [PENDING, PROCESSING, SUCCEEDED, FAILED]}, advisory: {type: boolean, enum: [true]}, generatedContent: {type: string, description: Present only when succeeded; not a source record or decision.}, errorCode: {type: string, description: 'Safe, non-sensitive failure reason.'}, createdAt: {$ref: '#/components/schemas/Timestamp'}, completedAt: {$ref: '#/components/schemas/Timestamp'}}
+      - type: object
+        required:
+        - postingId
+        - calculationVersion
+        - sourceChanged
+        properties:
+          kind:
+            type: string
+            enum:
+            - MATCH_EXPLANATION
+      - type: object
+        required:
+        - reportVersionId
+        properties:
+          kind:
+            type: string
+            enum:
+            - REPORT_SUMMARY
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        inputFingerprint:
+          type: string
+        promptVersion:
+          type: string
+        postingId:
+          $ref: '#/components/schemas/Id'
+        reportVersionId:
+          $ref: '#/components/schemas/Id'
+        calculationVersion:
+          type: string
+        sourceChanged:
+          type: boolean
+        kind:
+          type: string
+          enum:
+          - MATCH_EXPLANATION
+          - REPORT_SUMMARY
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PROCESSING
+          - SUCCEEDED
+          - FAILED
+        advisory:
+          type: boolean
+          enum:
+          - true
+        generatedContent:
+          type: string
+          description: Present only when succeeded; not a source record or decision.
+        errorCode:
+          type: string
+          description: Safe, non-sensitive failure reason.
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        completedAt:
+          $ref: '#/components/schemas/Timestamp'
     Problem:
       type: object
-      required: [type, title, status]
-      properties: {type: {type: string, format: uri}, title: {type: string}, status: {type: integer}, detail: {type: string}, instance: {type: string}}
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
     ValidationProblem:
       allOf:
-        - {$ref: '#/components/schemas/Problem'}
-        - type: object
-          properties: {errors: {type: array, items: {type: object, required: [field, message], properties: {field: {type: string}, message: {type: string}, code: {type: string}}}}}
+      - $ref: '#/components/schemas/Problem'
+      - type: object
+        properties:
+          errors:
+            type: array
+            items:
+              type: object
+              required:
+              - field
+              - message
+              properties:
+                field:
+                  type: string
+                message:
+                  type: string
+                code:
+                  type: string
+    SignIn:
+      type: object
+      required:
+      - email
+      - password
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+        activeRole:
+          $ref: '#/components/schemas/Role'
+    ActiveRoleRequest:
+      type: object
+      required:
+      - role
+      additionalProperties: false
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+    ReplaceSkills:
+      type: object
+      required:
+      - skills
+      additionalProperties: false
+      properties:
+        skills:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/StudentSkillInput'
+    LifecycleInput:
+      type: object
+      required:
+      - targetStatus
+      additionalProperties: false
+      properties:
+        targetStatus:
+          type: string
+          enum:
+          - CLOSED
+          - ARCHIVED
+          - COMPLETED
+          - TERMINATED
+        note:
+          type: string
+          maxLength: 4000
+    AssessmentInput:
+      type: object
+      required:
+      - status
+      - ratings
+      additionalProperties: false
+      properties:
+        status:
+          $ref: '#/components/schemas/AssessmentState'
+        ratings:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+            maximum: 5
+        reflection:
+          type: string
+        learningOutcomes:
+          type: string
+        comments:
+          type: string
+        completionDecision:
+          $ref: '#/components/schemas/CompletionDecision'
+    AssignmentChange:
+      type: object
+      required:
+      - reason
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        expectedAssignmentId:
+          type: string
+          format: uuid
+          nullable: true
+        supervisorUserId:
+          type: string
+          format: uuid
+          nullable: true
+    SessionResponse:
+      type: object
+      required:
+      - accessToken
+      - tokenType
+      - activeRole
+      - user
+      - expiresAt
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum:
+          - Bearer
+        activeRole:
+          $ref: '#/components/schemas/Role'
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          required:
+          - id
+          - email
+          - fullName
+          - roles
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            fullName:
+              type: string
+            roles:
+              type: array
+              items:
+                $ref: '#/components/schemas/Role'
+    RoleResponse:
+      type: object
+      required:
+      - activeRole
+      - accessToken
+      properties:
+        activeRole:
+          $ref: '#/components/schemas/Role'
+        accessToken:
+          type: string

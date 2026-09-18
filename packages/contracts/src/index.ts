@@ -1,2 +1,3 @@
-/** Public contract entry point. Run `pnpm contracts:generate` to refresh OpenAPI types. */
-export {};
+export type { paths, components, operations } from "./generated/openapi";
+
+export type * from "./client";

@@ -21,23 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Refresh a valid local session token */
-        post: operations["refreshSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/sign-out": {
         parameters: {
             query?: never;
@@ -55,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read API and deadline-scheduler freshness */
+        get: operations["healthcheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -63,7 +63,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get authenticated identity and permitted roles */
-        get: operations["getMe"];
+        get: operations["me"];
         put?: never;
         post?: never;
         delete?: never;
@@ -84,65 +84,7 @@ export interface paths {
          * Select a permitted role and rotate the current session token
          * @description Validate current user_roles; lock the session and increment its version when changing role. Old tokens for this session then return 401. Selecting the existing role is a no-op. Other sessions are unchanged. See identity protocol in arc42.
          */
-        put: operations["setActiveRole"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/supervisors": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Find eligible supervisors for acceptance or Admin assignment management
-         * @description Supply exactly one applicationId or placementId. Own-company Staff/Admin may query an application; only Admin may query a placement. Eligibility means a user currently holds SUPERVISOR and a supervisor profile. No company or program restriction is imposed in v1. This lookup grants no placement access.
-         */
-        get: operations["listEligibleSupervisors"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/placements/{placementId}/supervisor-assignments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get retained supervisor assignment history as Admin */
-        get: operations["listSupervisorAssignments"];
-        put?: never;
-        /**
-         * Assign, replace, or revoke an Active placement supervisor as Admin
-         * @description Lock placement and compare expectedAssignmentId to its active assignment (null means unassigned). Revoke the prior row and optionally insert the replacement atomically. Retain actor, time, and reason. Same supervisor is a no-op; stale expected assignment returns 409. Access is checked on every subsequent request.
-         */
-        post: operations["changeSupervisorAssignment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/placements/{placementId}/reporting-periods": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List canonical reporting weeks and deadlines including weeks with no report */
-        get: operations["listReportingPeriods"];
-        put?: never;
+        put: operations["setRole"];
         post?: never;
         delete?: never;
         options?: never;
@@ -158,14 +100,14 @@ export interface paths {
             cookie?: never;
         };
         /** Get the current Student profile */
-        get: operations["getMyStudentProfile"];
+        get: operations["profile"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Update the current Student contact and education profile */
-        patch: operations["updateMyStudentProfile"];
+        patch: operations["updateProfile"];
         trace?: never;
     };
     "/students/me/skills": {
@@ -176,9 +118,9 @@ export interface paths {
             cookie?: never;
         };
         /** Reload the current Student skill set including stable skill IDs and optional proficiency */
-        get: operations["getMySkills"];
+        get: operations["getSkills"];
         /** Replace the current Student skill set */
-        put: operations["replaceMySkills"];
+        put: operations["setSkills"];
         post?: never;
         delete?: never;
         options?: never;
@@ -194,9 +136,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get current Student career preferences */
-        get: operations["getMyPreferences"];
+        get: operations["getPreferences"];
         /** Replace current Student career preferences */
-        put: operations["replaceMyPreferences"];
+        put: operations["setPreferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -204,98 +146,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/documents": {
+    "/postings": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List reusable documents owned by the current Student */
-        get: operations["listMyDocuments"];
-        put?: never;
-        /** Start an authorized private-document upload */
-        post: operations["createDocumentUpload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/{documentId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a reusable document link when no draft or submitted record retains it */
-        delete: operations["deleteDocument"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/{documentId}/content": {
-        parameters: {
-            query: {
-                /** @description API-signed five-minute authorization bound to user session, document, and HTTP method; bearer authentication and current record authorization are also required. */
-                transferToken: string;
-            };
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        /** Stream an authorized AVAILABLE document through the API */
-        get: operations["downloadDocumentContent"];
         /**
-         * Stream document bytes through the API to private storage
-         * @description Only the owner of a PENDING document may upload. Token binds declared size, media type and digest. Limit 10 MiB; PDF, JPEG, PNG or DOCX only. Verify actual bytes, digest and signature before completion. Repeating the same bytes before completion is safe; AVAILABLE documents cannot be overwritten.
+         * Discover eligible postings or list managed postings
+         * @description Student requests return only Open, non-expired postings. Company Staff and Admin receive records within their authorized management scope; `includeUnavailable` is ignored for Student discovery.
          */
-        put: operations["uploadDocumentContent"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/{documentId}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
+        get: operations["postingsList"];
         put?: never;
-        /**
-         * Finalize a private-document upload after API-mediated transfer
-         * @description Verify stored bytes against declared size and digest and supported file signatures. AVAILABLE completion retries return the same document; invalid bytes result in REJECTED. No browser storage transfer occurs.
-         */
-        post: operations["completeDocumentUpload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/documents/{documentId}/download-url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Issue a short-lived download URL for an authorized document */
-        get: operations["getDocumentDownloadUrl"];
-        put?: never;
-        post?: never;
+        /** Create a Draft posting */
+        post: operations["createPosting"];
         delete?: never;
         options?: never;
         head?: never;
@@ -319,7 +184,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/companies/{companyId}": {
+    "/companies/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -327,46 +192,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get a company profile */
-        get: operations["getCompany"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update an owned or administered company profile */
-        patch: operations["updateCompany"];
-        trace?: never;
-    };
-    "/postings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Discover eligible postings or list managed postings
-         * @description Student requests return only Open, non-expired postings. Company Staff and Admin receive records within their authorized management scope; `includeUnavailable` is ignored for Student discovery.
-         */
-        get: operations["listPostings"];
-        put?: never;
-        /** Create a Draft posting */
-        post: operations["createPosting"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/postings/saved": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the current Student's saved postings, including later-unavailable items */
-        get: operations["listSavedPostings"];
+        get: operations["company"];
         put?: never;
         post?: never;
         delete?: never;
@@ -375,7 +201,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/postings/{postingId}": {
+    "/postings/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -389,45 +215,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Edit a Draft or otherwise authorized managed posting */
-        patch: operations["updatePosting"];
-        trace?: never;
-    };
-    "/postings/{postingId}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Validate and publish a Draft posting */
-        post: operations["publishPosting"];
-        delete?: never;
-        options?: never;
-        head?: never;
         patch?: never;
         trace?: never;
     };
-    "/postings/{postingId}/lifecycle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Close or archive an authorized posting */
-        post: operations["transitionPostingLifecycle"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/postings/{postingId}/saved": {
+    "/postings/{id}/saved": {
         parameters: {
             query?: never;
             header?: never;
@@ -439,24 +230,7 @@ export interface paths {
         put: operations["savePosting"];
         post?: never;
         /** Remove the current Student's saved posting */
-        delete: operations["unsavePosting"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/postings/{postingId}/applications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List applications for an owned or administered posting */
-        get: operations["listPostingApplications"];
-        put?: never;
-        post?: never;
-        delete?: never;
+        delete: operations["unsave"];
         options?: never;
         head?: never;
         patch?: never;
@@ -470,17 +244,17 @@ export interface paths {
             cookie?: never;
         };
         /** List applications available to the active role */
-        get: operations["listApplications"];
+        get: operations["applications"];
         put?: never;
         /** Submit one application to an eligible posting */
-        post: operations["createApplication"];
+        post: operations["apply"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/applications/{applicationId}": {
+    "/applications/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -488,7 +262,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get an authorized application, submission snapshot, documents, and immutable history */
-        get: operations["getApplication"];
+        get: operations["application"];
         put?: never;
         post?: never;
         delete?: never;
@@ -497,7 +271,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/applications/{applicationId}/status": {
+    "/applications/{id}/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -510,14 +284,14 @@ export interface paths {
          * Move an application through an authorized staff/Admin transition
          * @description Lock the application. From INTERVIEW, acceptance stores an immutable acceptance command and creates one placement, assignment, reporting calendar, history entry, and notification in one transaction. On ACCEPTED, an identical canonical supervisor/date/note command returns 200 with the existing placement link and no writes; different acceptance input returns 409 ACCEPTANCE_CONFLICT. Compare against the original command even after reassignment. Other terminal transitions return 409. Rejection is allowed from any staff-review non-terminal state.
          */
-        post: operations["transitionApplicationStatus"];
+        post: operations["accept"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/applications/{applicationId}/withdraw": {
+    "/applications/{id}/withdraw": {
         parameters: {
             query?: never;
             header?: never;
@@ -527,22 +301,25 @@ export interface paths {
         get?: never;
         put?: never;
         /** Withdraw the current Student's non-terminal application */
-        post: operations["withdrawApplication"];
+        post: operations["withdraw"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/placements": {
+    "/supervisors": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List placements in the active role's permitted scope */
-        get: operations["listPlacements"];
+        /**
+         * Find eligible supervisors for acceptance or Admin assignment management
+         * @description Supply exactly one applicationId or placementId. Own-company Staff/Admin may query an application; only Admin may query a placement. Eligibility means a user currently holds SUPERVISOR and a supervisor profile. No company or program restriction is imposed in v1. This lookup grants no placement access.
+         */
+        get: operations["supervisors"];
         put?: never;
         post?: never;
         delete?: never;
@@ -551,16 +328,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/placements/{placementId}": {
+    "/placements/{placementId}/supervisor-assignments": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get authorized placement context and role-permitted progress summary */
-        get: operations["getPlacement"];
-        put?: never;
+        /** Get retained supervisor assignment history as Admin */
+        get: operations["assignmentHistory"];
+        /** changeAssignment */
+        put: operations["changeAssignment"];
         post?: never;
         delete?: never;
         options?: never;
@@ -568,7 +346,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/placements/{placementId}/lifecycle": {
+    "/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reusable documents owned by the current Student */
+        get: operations["listDocuments"];
+        put?: never;
+        /** Start an authorized private-document upload */
+        post: operations["beginDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{documentId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream an authorized AVAILABLE document through the API */
+        get: operations["downloadDocument"];
+        /**
+         * Stream document bytes through the API to private storage
+         * @description Only the owner of a PENDING document may upload. Token binds declared size, media type and digest. Limit 10 MiB; PDF, JPEG, PNG or DOCX only. Verify actual bytes, digest and signature before completion. Repeating the same bytes before completion is safe; AVAILABLE documents cannot be overwritten.
+         */
+        put: operations["uploadDocument"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{documentId}/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -577,33 +394,18 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Complete or terminate an Active placement */
-        post: operations["transitionPlacementLifecycle"];
+        /**
+         * Finalize a private-document upload after API-mediated transfer
+         * @description Verify stored bytes against declared size and digest and supported file signatures. AVAILABLE completion retries return the same document; invalid bytes result in REJECTED. No browser storage transfer occurs.
+         */
+        post: operations["completeDocument"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/placements/{placementId}/tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List tasks for an authorized placement */
-        get: operations["listPlacementTasks"];
-        put?: never;
-        /** Create a task on an Active assigned placement */
-        post: operations["createTask"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/placements/{placementId}/tasks/{taskId}/status": {
+    "/documents/{documentId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -613,11 +415,45 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** Remove a reusable document link when no draft or submitted record retains it */
+        delete: operations["deleteDocument"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{documentId}/download-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issue a short-lived download URL for an authorized document */
+        get: operations["downloadUrl"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update task status as the placement Student */
-        patch: operations["updateTaskStatus"];
+        patch?: never;
+        trace?: never;
+    };
+    "/placements/{placementId}/reporting-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List canonical reporting weeks and deadlines including weeks with no report */
+        get: operations["listPeriods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/placements/{placementId}/reports": {
@@ -631,7 +467,7 @@ export interface paths {
         get: operations["listReports"];
         put?: never;
         /** Create the current Student's private draft for one reporting week */
-        post: operations["createReportDraft"];
+        post: operations["createDraft"];
         delete?: never;
         options?: never;
         head?: never;
@@ -656,7 +492,7 @@ export interface paths {
          * Save the current Student's draft or revision content
          * @description Draft input replaces the saved draft and attachment selection. reportingPeriodId cannot change. Only DRAFT or REVISION_REQUESTED on an Active owned placement; revision saves keep REVISION_REQUESTED until submission.
          */
-        patch: operations["saveReportDraft"];
+        patch: operations["patchReport"];
         trace?: never;
     };
     "/reports/{reportId}/submit": {
@@ -704,9 +540,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get the authorized Student self-assessment */
-        get: operations["getSelfAssessment"];
+        get: operations["getSelf"];
         /** Save or submit the placement Student's independent self-assessment */
-        put: operations["upsertSelfAssessment"];
+        put: operations["putSelf"];
         post?: never;
         delete?: never;
         options?: never;
@@ -722,78 +558,10 @@ export interface paths {
             cookie?: never;
         };
         /** Get the authorized separate supervisor/Admin performance evaluation */
-        get: operations["getPerformanceEvaluation"];
+        get: operations["getEvaluation"];
         /** Save or submit an assigned Supervisor/Admin performance evaluation */
-        put: operations["upsertPerformanceEvaluation"];
+        put: operations["putEvaluation"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/monitoring": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get the Admin-only, read-only program/term monitoring dashboard */
-        get: operations["getMonitoring"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List only the current user's in-app notifications */
-        get: operations["listNotifications"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/mark-read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark all current-user notifications as read */
-        post: operations["markAllNotificationsRead"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/{notificationId}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark one current-user notification as read */
-        post: operations["markNotificationRead"];
         delete?: never;
         options?: never;
         head?: never;
@@ -810,7 +578,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Request optional advisory AI explanation or summary
+         * Disabled: optional AI worker is not deployed
          * @description Student requests own match explanation; assigned Supervisor/Admin requests a specific submitted reportVersionId. Authorize source and persist immutable minimized input in the same consistent database snapshot. Reuse is scoped to requester, kind, source, input fingerprint and prompt version. Polling rechecks current source access.
          */
         post: operations["createAiJob"];
@@ -827,8 +595,213 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Poll an authorized optional AI job */
+        /** Disabled: optional AI worker is not deployed */
         get: operations["getAiJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/postings/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate and publish a Draft posting */
+        post: operations["publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/postings/{id}/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close or archive an authorized posting */
+        post: operations["postingLifecycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/placements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List placements in the active role's permitted scope */
+        get: operations["placements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/placements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get authorized placement context and role-permitted progress summary */
+        get: operations["placement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/placements/{id}/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete or terminate an Active placement */
+        post: operations["placementLifecycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/placements/{id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tasks for an authorized placement */
+        get: operations["tasks"];
+        put?: never;
+        /** Create a task on an Active assigned placement */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/placements/{id}/tasks/{taskId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update task status as the placement Student */
+        patch: operations["taskStatus"];
+        trace?: never;
+    };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List only the current user's in-app notifications */
+        get: operations["notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one current-user notification as read */
+        post: operations["markRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/mark-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all current-user notifications as read */
+        post: operations["markAllRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/monitoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the Admin-only, read-only program/term monitoring dashboard */
+        get: operations["monitoring"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/companies/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** companies */
+        get: operations["companies"];
         put?: never;
         post?: never;
         delete?: never;
@@ -920,12 +893,9 @@ export interface components {
             reportId?: components["schemas"]["Id"];
         };
         Me: {
-            id: components["schemas"]["Id"];
-            /** Format: email */
-            email: string;
-            fullName: string;
-            activeRole: components["schemas"]["Role"];
+            id: string;
             roles: components["schemas"]["Role"][];
+            activeRole: components["schemas"]["Role"];
         };
         StudentProfileInput: {
             fullName: string;
@@ -945,9 +915,11 @@ export interface components {
             skills: components["schemas"]["StudentSkillInput"][];
         };
         StudentSkillInput: {
-            name: string;
+            name?: string;
             /** @enum {string} */
             proficiency?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+            /** Format: uuid */
+            id?: string;
         };
         /** @description id is the canonical skills.id; proficiency is omitted when unset. PUT normalizes names, rejects duplicate normalized names and atomically replaces the complete set. */
         StudentSkill: components["schemas"]["StudentSkillInput"] & {
@@ -972,32 +944,25 @@ export interface components {
         };
         DocumentUpload: {
             document: components["schemas"]["Document"];
-            /**
-             * Format: uri
-             * @description Absolute same-origin API content URL with transferToken; PUT using bearer authentication. Never a storage URL.
-             */
+            /** @description API-relative content URL; resolve against API origin and send bearer authentication. Five-minute expiry. */
             uploadUrl: string;
             expiresAt: components["schemas"]["Timestamp"];
         };
         DownloadUrl: {
-            /**
-             * Format: uri
-             * @description Absolute same-origin API content URL with transferToken; GET using bearer authentication. Expires in five minutes.
-             */
+            /** @description API-relative content URL; resolve against API origin and send bearer authentication. Five-minute expiry. */
             url: string;
             expiresAt: components["schemas"]["Timestamp"];
         };
         Document: {
             id: components["schemas"]["Id"];
-            fileName: string;
             contentType: string;
-            /** Format: int64 */
-            sizeBytes: number;
+            sizeBytes: string;
             /** @enum {string} */
             state: "PENDING" | "AVAILABLE" | "REJECTED" | "DELETED";
             /** @enum {string} */
             kind?: "CV" | "PORTFOLIO" | "TRANSCRIPT" | "OTHER";
             createdAt: components["schemas"]["Timestamp"];
+            originalName: string;
         };
         DocumentList: {
             items: components["schemas"]["Document"][];
@@ -1025,19 +990,20 @@ export interface components {
         };
         PostingInput: {
             companyId: components["schemas"]["Id"];
-            termId?: components["schemas"]["Id"];
+            /** Format: uuid */
+            termId?: string;
             title: string;
-            description?: string;
+            description: string;
             category?: string;
             location?: string;
-            workArrangement?: components["schemas"]["WorkArrangement"];
-            durationWeeks?: number;
-            openings?: number;
-            applicationDeadline?: components["schemas"]["Date"];
-            responsibilities?: string;
-            benefits?: string;
+            workArrangement: components["schemas"]["WorkArrangement"];
+            durationWeeks: number;
+            openings: number;
+            applicationDeadline: components["schemas"]["Date"];
             /** @description Explicit declaration of both importance groups; empty array is allowed. Omission on a new draft leaves skills undeclared and fails publish; omission on edit preserves the prior declaration. */
             skills?: components["schemas"]["PostingSkillInput"][];
+            /** @description Accepted for compatibility; server resolves timezone from academic term or fallback. */
+            deadlineTimezone?: string;
         };
         /** @description skill-v1 weighted presence score as specified in design/behavior-rules.md; zero denominator produces 0 with NO_POSTING_SKILLS. */
         MatchScore: {
@@ -1051,17 +1017,25 @@ export interface components {
             /** @enum {boolean} */
             advisory: true;
         };
-        Posting: components["schemas"]["PostingInput"] & {
-            id: components["schemas"]["Id"];
-            company: components["schemas"]["Company"];
+        Posting: {
+            companyId: components["schemas"]["Id"];
+            /** Format: uuid */
+            termId?: string;
+            title: string;
+            description: string;
+            category?: string;
+            location?: string;
+            workArrangement?: components["schemas"]["WorkArrangement"];
+            durationWeeks?: number;
+            openings?: number;
+            applicationDeadline?: components["schemas"]["Date"];
+            responsibilities?: string;
+            benefits?: string;
+            /** @description Explicit declaration of both importance groups; empty array is allowed. Omission on a new draft leaves skills undeclared and fails publish; omission on edit preserves the prior declaration. */
+            skills: components["schemas"]["PostingSkillInput"][];
+            id: string;
             status: components["schemas"]["PostingStatus"];
-            /** @description Derived from Open status and deadline; never an AI outcome. */
-            eligible: boolean;
-            publishedAt?: components["schemas"]["Timestamp"];
-            createdAt: components["schemas"]["Timestamp"];
-            isSaved?: boolean;
-            hasApplied?: boolean;
-            matchScore?: components["schemas"]["MatchScore"];
+            match?: components["schemas"]["MatchScore"];
         };
         PostingPage: {
             items: components["schemas"]["Posting"][];
@@ -1086,7 +1060,7 @@ export interface components {
             availability: string;
             coverNote: string;
             cvDocumentId: components["schemas"]["Id"];
-            additionalDocumentIds?: components["schemas"]["Id"][];
+            supportingDocumentIds?: components["schemas"]["Id"][];
         };
         StatusHistoryEntry: {
             id: components["schemas"]["Id"];
@@ -1096,14 +1070,23 @@ export interface components {
             note?: string;
             changedAt: components["schemas"]["Timestamp"];
         };
-        Application: components["schemas"]["ApplicationInput"] & {
+        Application: {
+            postingId: components["schemas"]["Id"];
+            contactName?: string;
+            contactEmail?: string;
+            contactPhone?: string;
+            university?: string;
+            major?: string;
+            graduationYear?: number;
+            availability?: string;
+            coverNote: string;
+            /** Format: uuid */
+            cvDocumentId?: string;
             id: components["schemas"]["Id"];
             status: components["schemas"]["ApplicationStatus"];
             submittedAt: components["schemas"]["Timestamp"];
-            posting?: components["schemas"]["Posting"];
-            documents?: components["schemas"]["Document"][];
-            history: components["schemas"]["StatusHistoryEntry"][];
-            placementId?: components["schemas"]["Id"];
+            history?: components["schemas"]["StatusHistoryEntry"][];
+            studentId: string;
         };
         ApplicationPage: {
             items: components["schemas"]["Application"][];
@@ -1179,10 +1162,10 @@ export interface components {
             updatedAt?: components["schemas"]["Timestamp"];
         };
         ReportDraftInput: {
-            reportingPeriodId: components["schemas"]["Id"];
-            accomplishments?: string;
-            challenges?: string;
-            nextWeekPlan?: string;
+            reportingPeriodId?: components["schemas"]["Id"];
+            accomplishments: string;
+            challenges: string;
+            nextWeekPlan: string;
             attachmentDocumentIds?: components["schemas"]["Id"][];
         };
         ReportVersion: {
@@ -1318,9 +1301,11 @@ export interface components {
             type: "APPLICATION_STATUS_CHANGED" | "TASK_ASSIGNED" | "REPORT_FEEDBACK" | "REPORT_REVISION_REQUESTED" | "DEADLINE";
             title: string;
             body?: string;
-            target?: components["schemas"]["Target"];
             createdAt: components["schemas"]["Timestamp"];
-            read: boolean;
+            /** Format: date-time */
+            readAt?: string | null;
+            targetType?: string;
+            targetId?: string;
         };
         NotificationPage: {
             items: components["schemas"]["Notification"][];
@@ -1379,6 +1364,58 @@ export interface components {
                 message: string;
                 code?: string;
             }[];
+        };
+        SignIn: {
+            /** Format: email */
+            email: string;
+            password: string;
+            activeRole?: components["schemas"]["Role"];
+        };
+        ActiveRoleRequest: {
+            role: components["schemas"]["Role"];
+        };
+        ReplaceSkills: {
+            skills: components["schemas"]["StudentSkillInput"][];
+        };
+        LifecycleInput: {
+            /** @enum {string} */
+            targetStatus: "CLOSED" | "ARCHIVED" | "COMPLETED" | "TERMINATED";
+            note?: string;
+        };
+        AssessmentInput: {
+            status: components["schemas"]["AssessmentState"];
+            ratings: {
+                [key: string]: number;
+            };
+            reflection?: string;
+            learningOutcomes?: string;
+            comments?: string;
+            completionDecision?: components["schemas"]["CompletionDecision"];
+        };
+        AssignmentChange: {
+            reason: string;
+            /** Format: uuid */
+            expectedAssignmentId?: string | null;
+            /** Format: uuid */
+            supervisorUserId?: string | null;
+        };
+        SessionResponse: {
+            accessToken: string;
+            /** @enum {string} */
+            tokenType: "Bearer";
+            activeRole: components["schemas"]["Role"];
+            /** Format: date-time */
+            expiresAt: string;
+            user: {
+                id: string;
+                email: string;
+                fullName: string;
+                roles: components["schemas"]["Role"][];
+            };
+        };
+        RoleResponse: {
+            activeRole: components["schemas"]["Role"];
+            accessToken: string;
         };
     };
     responses: {
@@ -1466,42 +1503,49 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** Format: email */
-                    email: string;
-                    /** Format: password */
-                    password: string;
-                    activeRole?: components["schemas"]["Role"];
-                };
+                "application/json": components["schemas"]["SignIn"];
             };
         };
         responses: {
-            /** @description Bearer session */
+            /** @description Success */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-        };
-    };
-    refreshSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    token: string;
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
                 };
+                content?: never;
             };
-        };
-        responses: {
-            /** @description Replacement bearer session */
-            201: {
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1525,9 +1569,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getMe: {
+    healthcheck: {
         parameters: {
             query?: never;
             header?: never;
@@ -1536,7 +1615,60 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current identity */
+            /** @description API health with scheduler freshness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1545,10 +1677,44 @@ export interface operations {
                     "application/json": components["schemas"]["Me"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    setActiveRole: {
+    setRole: {
         parameters: {
             query?: never;
             header?: never;
@@ -1557,128 +1723,57 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ActiveRoleInput"];
+                "application/json": components["schemas"]["ActiveRoleRequest"];
             };
         };
         responses: {
-            /** @description Authoritative identity and replacement bearer token */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoleSession"];
+                    "application/json": components["schemas"]["RoleResponse"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listEligibleSupervisors: {
-        parameters: {
-            query?: {
-                applicationId?: components["schemas"]["Id"];
-                placementId?: components["schemas"]["Id"];
-                q?: components["parameters"]["Search"];
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Eligible supervisor page */
-            200: {
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["SupervisorPage"];
-                };
+                content?: never;
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listSupervisorAssignments: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                placementId: components["parameters"]["PlacementId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Assignment history ordered by assignedAt */
-            200: {
+            /** @description Unauthenticated */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["SupervisorAssignment"][];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    changeSupervisorAssignment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                placementId: components["parameters"]["PlacementId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AssignmentChangeInput"];
-            };
-        };
-        responses: {
-            /** @description Updated placement */
-            200: {
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Placement"];
-                };
+                content?: never;
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listReportingPeriods: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                placementId: components["parameters"]["PlacementId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Periods in ascending week order for an authorized placement participant */
-            200: {
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ReportingPeriod"][];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getMyStudentProfile: {
+    profile: {
         parameters: {
             query?: never;
             header?: never;
@@ -1696,10 +1791,44 @@ export interface operations {
                     "application/json": components["schemas"]["StudentProfile"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    updateMyStudentProfile: {
+    updateProfile: {
         parameters: {
             query?: never;
             header?: never;
@@ -1721,11 +1850,44 @@ export interface operations {
                     "application/json": components["schemas"]["StudentProfile"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getMySkills: {
+    getSkills: {
         parameters: {
             query?: never;
             header?: never;
@@ -1734,7 +1896,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current skills */
+            /** @description Records */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1743,10 +1905,44 @@ export interface operations {
                     "application/json": components["schemas"]["StudentSkill"][];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    replaceMySkills: {
+    setSkills: {
         parameters: {
             query?: never;
             header?: never;
@@ -1755,7 +1951,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SkillSetInput"];
+                "application/json": components["schemas"]["ReplaceSkills"];
             };
         };
         responses: {
@@ -1768,10 +1964,44 @@ export interface operations {
                     "application/json": components["schemas"]["StudentSkill"][];
                 };
             };
-            400: components["responses"]["ValidationError"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getMyPreferences: {
+    getPreferences: {
         parameters: {
             query?: never;
             header?: never;
@@ -1789,9 +2019,44 @@ export interface operations {
                     "application/json": components["schemas"]["Preferences"];
                 };
             };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    replaceMyPreferences: {
+    setPreferences: {
         parameters: {
             query?: never;
             header?: never;
@@ -1813,133 +2078,36 @@ export interface operations {
                     "application/json": components["schemas"]["Preferences"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-        };
-    };
-    listMyDocuments: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Document list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocumentList"];
-                };
-            };
-        };
-    };
-    createDocumentUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DocumentUploadRequest"];
-            };
-        };
-        responses: {
-            /** @description Upload authorization */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocumentUpload"];
-                };
-            };
-            400: components["responses"]["ValidationError"];
-        };
-    };
-    deleteDocument: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed */
-            204: {
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    downloadDocumentContent: {
-        parameters: {
-            query: {
-                /** @description API-signed five-minute authorization bound to user session, document, and HTTP method; bearer authentication and current record authorization are also required. */
-                transferToken: string;
-            };
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description File bytes with safe Content-Disposition attachment filename */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/octet-stream": string;
-                };
-            };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    uploadDocumentContent: {
-        parameters: {
-            query: {
-                /** @description API-signed five-minute authorization bound to user session, document, and HTTP method; bearer authentication and current record authorization are also required. */
-                transferToken: string;
-            };
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/octet-stream": string;
-            };
-        };
-        responses: {
-            /** @description Bytes stored pending completion */
-            204: {
+            /** @description Unauthenticated */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            /** @description File exceeds 10 MiB */
-            413: {
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1947,141 +2115,15 @@ export interface operations {
             };
         };
     };
-    completeDocumentUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Available document */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Document"];
-                };
-            };
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getDocumentDownloadUrl: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                documentId: components["parameters"]["DocumentId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Authorized URL */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DownloadUrl"];
-                };
-            };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listCompanies: {
+    postingsList: {
         parameters: {
             query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                q?: components["parameters"]["Search"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Company page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CompanyPage"];
-                };
-            };
-        };
-    };
-    getCompany: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                companyId: components["parameters"]["CompanyId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Company */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Company"];
-                };
-            };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    updateCompany: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                companyId: components["parameters"]["CompanyId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CompanyInput"];
-            };
-        };
-        responses: {
-            /** @description Updated company */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Company"];
-                };
-            };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listPostings: {
-        parameters: {
-            query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                q?: components["parameters"]["Search"];
-                category?: string;
+                page?: number;
+                pageSize?: number;
+                search?: string;
+                sort?: string;
                 location?: string;
-                durationWeeks?: number;
-                workArrangement?: components["schemas"]["WorkArrangement"];
-                /** @description Stable ordering and preference dimensions follow skill-v1 behavior rules. */
-                sort?: "relevance" | "newest" | "match_score";
-                companyId?: string;
-                includeUnavailable?: boolean;
+                workArrangement?: string;
             };
             header?: never;
             path?: never;
@@ -2089,14 +2131,49 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Posting page */
+            /** @description Records. Paged collections return at most pageSize items. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PostingPage"];
+                    "application/json": components["schemas"]["Posting"][];
                 };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2122,32 +2199,153 @@ export interface operations {
                     "application/json": components["schemas"]["Posting"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    listSavedPostings: {
+    listCompanies: {
         parameters: {
-            query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Saved posting page */
+            /** @description Records. Paged collections return at most pageSize items. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PostingPage"];
+                    "application/json": components["schemas"]["Company"][];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    company: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Company */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Company"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getPosting: {
@@ -2155,7 +2353,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                postingId: components["parameters"]["PostingId"];
+                id: string;
             };
             cookie?: never;
         };
@@ -2170,90 +2368,41 @@ export interface operations {
                     "application/json": components["schemas"]["Posting"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updatePosting: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                postingId: components["parameters"]["PostingId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PostingInput"];
-            };
-        };
-        responses: {
-            /** @description Updated posting */
-            200: {
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Posting"];
-                };
+                content?: never;
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    publishPosting: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                postingId: components["parameters"]["PostingId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Open posting */
-            200: {
+            /** @description Unauthenticated */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Posting"];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["PublishValidationError"];
-        };
-    };
-    transitionPostingLifecycle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                postingId: components["parameters"]["PostingId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PostingLifecycleInput"];
-            };
-        };
-        responses: {
-            /** @description Updated posting */
-            200: {
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Posting"];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     savePosting: {
@@ -2261,78 +2410,116 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                postingId: components["parameters"]["PostingId"];
+                id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Saved or already saved */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    unsavePosting: {
+    unsave: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                postingId: components["parameters"]["PostingId"];
+                id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Removed */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listPostingApplications: {
-        parameters: {
-            query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                status?: components["schemas"]["ApplicationStatus"];
-            };
-            header?: never;
-            path: {
-                postingId: components["parameters"]["PostingId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Application page */
-            200: {
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ApplicationPage"];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    listApplications: {
+    applications: {
         parameters: {
             query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                status?: components["schemas"]["ApplicationStatus"];
-                postingId?: string;
+                page?: number;
+                pageSize?: number;
             };
             header?: never;
             path?: never;
@@ -2340,18 +2527,53 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Application page */
+            /** @description Records. Paged collections return at most pageSize items. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApplicationPage"];
+                    "application/json": components["schemas"]["Application"][];
                 };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
-    createApplication: {
+    apply: {
         parameters: {
             query?: never;
             header?: never;
@@ -2373,17 +2595,49 @@ export interface operations {
                     "application/json": components["schemas"]["Application"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getApplication: {
+    application: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                applicationId: components["parameters"]["ApplicationId"];
+                id: string;
             };
             cookie?: never;
         };
@@ -2398,16 +2652,49 @@ export interface operations {
                     "application/json": components["schemas"]["Application"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    transitionApplicationStatus: {
+    accept: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                applicationId: components["parameters"]["ApplicationId"];
+                id: string;
             };
             cookie?: never;
         };
@@ -2417,26 +2704,61 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated application and placement link when accepted */
-            200: {
+            /** @description Transition completed. Acceptance returns application and placement; identical retries return the same records. */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Application"];
+                    "application/json": components["schemas"]["Application"] | {
+                        application: components["schemas"]["Application"];
+                        placement: components["schemas"]["Placement"];
+                    };
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    withdrawApplication: {
+    withdraw: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                applicationId: components["parameters"]["ApplicationId"];
+                id: string;
             };
             cookie?: never;
         };
@@ -2447,7 +2769,7 @@ export interface operations {
         };
         responses: {
             /** @description Withdrawn application */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2455,17 +2777,51 @@ export interface operations {
                     "application/json": components["schemas"]["Application"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    listPlacements: {
+    supervisors: {
         parameters: {
             query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                status?: components["schemas"]["PlacementStatus"];
-                termId?: string;
+                page?: number;
+                pageSize?: number;
+                applicationId?: string;
+                placementId?: string;
+                search?: string;
             };
             header?: never;
             path?: never;
@@ -2473,147 +2829,626 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Placement page */
+            /** @description Eligible supervisor page */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PlacementPage"];
+                    "application/json": components["schemas"]["SupervisorPage"];
                 };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
-    getPlacement: {
+    assignmentHistory: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Placement */
+            /** @description Records. Paged collections return at most pageSize items. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Placement"];
+                    "application/json": components["schemas"]["SupervisorAssignment"][];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    transitionPlacementLifecycle: {
+    changeAssignment: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlacementLifecycleInput"];
+                "application/json": components["schemas"]["AssignmentChange"];
             };
         };
         responses: {
-            /** @description Updated placement */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Placement"];
-                };
+                content?: never;
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    listPlacementTasks: {
+    listDocuments: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                placementId: components["parameters"]["PlacementId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Tasks */
+            /** @description Document list */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"][];
+                    "application/json": components["schemas"]["DocumentList"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    createTask: {
+    beginDocument: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                placementId: components["parameters"]["PlacementId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TaskInput"];
+                "application/json": components["schemas"]["DocumentUploadRequest"];
             };
         };
         responses: {
-            /** @description Created task */
+            /** @description Upload authorization */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/json": components["schemas"]["DocumentUpload"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    updateTaskStatus: {
+    downloadDocument: {
         parameters: {
-            query?: never;
+            query: {
+                transferToken: string;
+            };
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
-                taskId: components["parameters"]["TaskId"];
+                documentId: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TaskStatusInput"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Updated task */
+            /** @description File bytes with safe Content-Disposition attachment filename */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"];
+                    "application/octet-stream": string;
                 };
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    uploadDocument: {
+        parameters: {
+            query: {
+                transferToken: string;
+            };
+            header?: never;
+            path: {
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Bytes stored pending completion */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    completeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Available document */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    downloadUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadUrl"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listPeriods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                placementId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Records. Paged collections return at most pageSize items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportingPeriod"][];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listReports: {
@@ -2621,13 +3456,13 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Reports */
+            /** @description Records */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2636,15 +3471,49 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"][];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    createReportDraft: {
+    createDraft: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
@@ -2663,8 +3532,41 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getReport: {
@@ -2672,7 +3574,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                reportId: components["parameters"]["ReportId"];
+                reportId: string;
             };
             cookie?: never;
         };
@@ -2687,15 +3589,49 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    saveReportDraft: {
+    patchReport: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                reportId: components["parameters"]["ReportId"];
+                reportId: string;
             };
             cookie?: never;
         };
@@ -2714,8 +3650,41 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     submitReport: {
@@ -2723,14 +3692,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                reportId: components["parameters"]["ReportId"];
+                reportId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Submitted report */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2738,9 +3707,41 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     reviewReport: {
@@ -2748,7 +3749,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                reportId: components["parameters"]["ReportId"];
+                reportId: string;
             };
             cookie?: never;
         };
@@ -2759,7 +3760,7 @@ export interface operations {
         };
         responses: {
             /** @description Reviewed report */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2767,17 +3768,49 @@ export interface operations {
                     "application/json": components["schemas"]["WeeklyReport"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getSelfAssessment: {
+    getSelf: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
@@ -2792,22 +3825,55 @@ export interface operations {
                     "application/json": components["schemas"]["SelfAssessment"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    upsertSelfAssessment: {
+    putSelf: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SelfAssessmentInput"];
+                "application/json": components["schemas"]["AssessmentInput"];
             };
         };
         responses: {
@@ -2820,16 +3886,49 @@ export interface operations {
                     "application/json": components["schemas"]["SelfAssessment"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getPerformanceEvaluation: {
+    getEvaluation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
@@ -2844,22 +3943,55 @@ export interface operations {
                     "application/json": components["schemas"]["PerformanceEvaluation"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    upsertPerformanceEvaluation: {
+    putEvaluation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                placementId: components["parameters"]["PlacementId"];
+                placementId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PerformanceEvaluationInput"];
+                "application/json": components["schemas"]["AssessmentInput"];
             };
         };
         responses: {
@@ -2872,11 +4004,745 @@ export interface operations {
                     "application/json": components["schemas"]["PerformanceEvaluation"];
                 };
             };
-            400: components["responses"]["ValidationError"];
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    getMonitoring: {
+    createAiJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Optional AI disabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAiJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aiJobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Optional AI disabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Open posting */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Posting"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postingLifecycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LifecycleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated posting */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Posting"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    placements: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Records. Paged collections return at most pageSize items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Placement"][];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    placement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Placement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Placement"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    placementLifecycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LifecycleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated placement */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Placement"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    tasks: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Records. Paged collections return at most pageSize items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"][];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskInput"];
+            };
+        };
+        responses: {
+            /** @description Created task */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    taskStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskStatusInput"];
+            };
+        };
+        responses: {
+            /** @description Updated task */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    notifications: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Records. Paged collections return at most pageSize items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"][];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated notification */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markAllRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marked read */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    monitoring: {
         parameters: {
             query?: {
                 programId?: string;
@@ -2897,44 +4763,36 @@ export interface operations {
                     "application/json": components["schemas"]["MonitoringDashboard"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listNotifications: {
-        parameters: {
-            query?: {
-                page?: components["parameters"]["Page"];
-                pageSize?: components["parameters"]["PageSize"];
-                unreadOnly?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Notification page */
-            200: {
+            /** @description Invalid input */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["NotificationPage"];
-                };
+                content?: never;
             };
-        };
-    };
-    markAllNotificationsRead: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Marked read */
-            204: {
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2942,76 +4800,59 @@ export interface operations {
             };
         };
     };
-    markNotificationRead: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notificationId: components["parameters"]["NotificationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Updated notification */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Notification"];
-                };
-            };
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAiJob: {
+    companies: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiJobRequest"];
-            };
-        };
-        responses: {
-            /** @description Durable queued/reused AI job */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiJob"];
-                };
-            };
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAiJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                aiJobId: components["parameters"]["AiJobId"];
-            };
-            cookie?: never;
-        };
         requestBody?: never;
         responses: {
-            /** @description Advisory job status/result */
+            /** @description Records. Paged collections return at most pageSize items. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AiJob"];
+                    "application/json": components["schemas"]["Company"][];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description State conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }
