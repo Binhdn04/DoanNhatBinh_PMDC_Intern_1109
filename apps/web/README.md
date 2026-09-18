@@ -1,34 +1,7 @@
-# @internhub/web
+# InternHub web
 
-React 19, TypeScript, Vite, and Tailwind CSS frontend for InternHub. It uses React Router, TanStack Query, session-scoped JWT storage, and the running NestJS controller at `/api/v1` by default.
+React, React Router and TanStack Query with Vite. Run `pnpm dev:web` at repository root after starting the API. The default `/api/v1` base uses Vite's proxy to localhost:3000. Set `VITE_API_BASE_URL` before building for a separately hosted API; configure its `WEB_ORIGIN` to the browser origin.
 
-## Run from the repository root
+`src/app` owns routing and session state; `src/features` owns workflow pages; `src/lib/api.ts` handles bearer tokens, problem details and private transfers. Wire models are imported from `packages/contracts`. Transfer URLs resolve against the configured API origin, and unexpected origins are rejected.
 
-```bash
-corepack enable
-corepack install
-pnpm install
-pnpm dev:web
-```
-
-Use `pnpm typecheck:web` and `pnpm build:web` to validate the application.
-
-Use `pnpm test:web` for the frontend unit tests. Copy `.env.example` to `.env.local` only when the API is hosted away from the Vite origin.
-
-## Source layout
-
-```text
-src/
-  app/                 # app shell, state-based navigation, sidebar
-  features/
-    discovery/         # internship listing, filtering, detail, mock internships
-    applications/      # apply, interview, result, application timeline
-    progress/          # task board, weekly report, supervisor review
-    evaluation/        # internship evaluation
-    profile/           # profile and organization screens
-    admin/             # monitoring dashboard
-  shared/ui/           # reusable controls
-  styles/              # global Tailwind entry stylesheet
-```
-
-Only controller-backed flows are exposed. Workflows without a currently running endpoint show an explicit unavailable state instead of mock data.
+Commands: `pnpm test:web`, `pnpm typecheck:web`, `pnpm build:web`. `pnpm test:browser` at the root runs the four-role internship lifecycle against an isolated API/database. AI controls are disabled until a real processor exists.
