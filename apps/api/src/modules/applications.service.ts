@@ -10,8 +10,6 @@ import {
   Application,
   ApplicationDocument,
   ApplicationHistory,
-  Company,
-  CompanyStaff,
   Document,
   Notification,
   Placement,
@@ -30,24 +28,13 @@ import { ApplicationDto, PageDto, TransitionDto } from "./dto";
 @Injectable()
 export class ApplicationsService {
   constructor(
-    @InjectRepository(Company) private companies: Repository<Company>,
-    @InjectRepository(CompanyStaff) private staff: Repository<CompanyStaff>,
-    @InjectRepository(Posting) private postings: Repository<Posting>,
     @InjectRepository(Application) private apps: Repository<Application>,
     @InjectRepository(ApplicationHistory)
     private history: Repository<ApplicationHistory>,
-    @InjectRepository(Placement) private placements: Repository<Placement>,
-    @InjectRepository(SupervisorAssignment)
-    private assignments: Repository<SupervisorAssignment>,
     private db: DataSource,
     private access: AccessService,
   ) {}
 
-  async company(id: string) {
-    const c = await this.companies.findOneBy({ id });
-    if (!c) throw new NotFoundException();
-    return c;
-  }
   async apply(p: Principal, b: ApplicationDto) {
     const required = [
       "coverNote",

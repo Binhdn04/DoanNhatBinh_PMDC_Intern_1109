@@ -21,17 +21,13 @@ import { AccessService } from "./access.service";
 import { Principal, assert } from "./auth";
 import { AssignmentDto, SupervisorQueryDto } from "./dto";
 const trim = (value?: string) => value?.trim() || undefined;
-const page = (n?: string) => Math.max(1, Number(n ?? 1) || 1);
 @Injectable()
 export class SupervisorsService {
   constructor(
     @InjectRepository(User) private users: Repository<User>,
-    @InjectRepository(UserRole) private userRoles: Repository<UserRole>,
     @InjectRepository(Application)
     private applications: Repository<Application>,
     @InjectRepository(Posting) private postings: Repository<Posting>,
-    @InjectRepository(SupervisorProfile)
-    private supervisorProfiles: Repository<SupervisorProfile>,
     @InjectRepository(SupervisorAssignment)
     private assignments: Repository<SupervisorAssignment>,
     private dataSource: DataSource,

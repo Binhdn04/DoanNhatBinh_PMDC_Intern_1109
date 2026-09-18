@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In, Repository } from "typeorm";
-import { normalizeCanonicalSkill } from "../infrastructure/database/canonical-backfill";
+import { resolveSkill } from "./skills";
 import {
   Skill,
   StudentPreference,
@@ -45,7 +45,7 @@ export class ProfilesService {
       await this.ensureProfile(p.id, m);
       const input = body.skills ?? [];
       const found = [];
-      for (const x of input) found.push(await this.resolveSkill(x, m));
+      for (const x of input) found.push(await resolveSkill(x, m));
       if (new Set(found.map((x) => x.id)).size !== found.length)
         throw new BadRequestException("Duplicate skills");
       await m.getRepository(StudentSkill).delete({ studentId: p.id });
@@ -101,29 +101,6 @@ export class ProfilesService {
   private async ensureProfile(userId: string, m?: EntityManager) {
     const r = m?.getRepository(StudentProfile) ?? this.profiles;
     return (await r.findOneBy({ userId })) ?? r.save({ userId });
-  }
-  private async resolveSkill(
-    x: { id?: string; name?: string },
-    m: EntityManager,
-  ) {
-    if (x.id) {
-      const e = await m.getRepository(Skill).findOneBy({ id: x.id });
-      if (e) return e;
-      throw new BadRequestException("Unknown skill");
-    }
-    const normalizedName = normalizeCanonicalSkill(x.name);
-    if (!normalizedName) throw new BadRequestException("Invalid skill");
-    const r = m.getRepository(Skill);
-    await r
-      .createQueryBuilder()
-      .insert()
-      .values({
-        name: x.name!.normalize("NFKC").trim().replace(/\s+/gu, " "),
-        normalizedName,
-      })
-      .orIgnore()
-      .execute();
-    return r.findOneByOrFail({ normalizedName });
   }
   private async skillDtos(studentId: string) {
     const links = await this.studentSkills.findBy({ studentId });

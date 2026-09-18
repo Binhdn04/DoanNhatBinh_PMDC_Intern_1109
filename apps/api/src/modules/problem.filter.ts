@@ -41,7 +41,8 @@ export class ProblemFilter implements ExceptionFilter {
           );
     const status = exception.getStatus();
     const body = exception.getResponse();
-    const detail = typeof body === "string" ? body : (body as any).message;
+    const detail =
+      typeof body === "string" ? body : (body as { message?: unknown }).message;
     const messages = Array.isArray(detail) ? detail : undefined;
     res
       .status(status)

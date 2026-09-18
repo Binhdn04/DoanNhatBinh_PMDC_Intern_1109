@@ -5,7 +5,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In, Repository } from "typeorm";
-import { normalizeCanonicalSkill } from "../infrastructure/database/canonical-backfill";
+import { resolveSkill } from "./skills";
 import {
   Company,
   Posting,
@@ -189,29 +189,6 @@ export class PostingsService {
   ) {
     return this.access.company(p, companyId, m);
   }
-  private async resolveSkill(
-    x: { id?: string; name?: string },
-    m: EntityManager,
-  ) {
-    if (x.id) {
-      const e = await m.getRepository(Skill).findOneBy({ id: x.id });
-      if (e) return e;
-      throw new BadRequestException("Unknown skill");
-    }
-    const normalizedName = normalizeCanonicalSkill(x.name);
-    if (!normalizedName) throw new BadRequestException("Invalid skill");
-    const r = m.getRepository(Skill);
-    await r
-      .createQueryBuilder()
-      .insert()
-      .values({
-        name: x.name!.normalize("NFKC").trim().replace(/\s+/gu, " "),
-        normalizedName,
-      })
-      .orIgnore()
-      .execute();
-    return r.findOneByOrFail({ normalizedName });
-  }
   private async replacePostingSkills(
     postingId: string,
     input: PostingDto["skills"],
@@ -221,7 +198,7 @@ export class PostingsService {
     if (input.some((x) => !x.importance))
       throw new BadRequestException("Skill importance required");
     const found = [];
-    for (const x of input) found.push(await this.resolveSkill(x, m));
+    for (const x of input) found.push(await resolveSkill(x, m));
     if (new Set(found.map((x) => x.id)).size !== found.length)
       throw new BadRequestException("Duplicate skills");
     await m.getRepository(PostingSkill).delete({ postingId });

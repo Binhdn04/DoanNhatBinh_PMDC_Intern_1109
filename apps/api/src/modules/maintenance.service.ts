@@ -18,7 +18,6 @@ import { SchedulerHealthService } from "./scheduler-health.service";
 @Injectable()
 export class MaintenanceService {
   constructor(
-    @InjectRepository(Posting) private postings: Repository<Posting>,
     @InjectRepository(SavedPosting) private saved: Repository<SavedPosting>,
     @InjectRepository(Document) private documents: Repository<Document>,
     @InjectRepository(ReportingPeriod)
@@ -89,57 +88,59 @@ export class MaintenanceService {
             .execute();
         }
       });
-    const today = now.toISOString().slice(0, 10);
-    const postings = await this.postings.find({ where: { status: "OPEN" } });
-    for (const posting of postings) {
-      const dueAt = deadlineInstant(
-        posting.applicationDeadline,
-        posting.deadlineTimezone,
-      );
-      if (
-        dueAt.getTime() - now.getTime() < 0 ||
-        dueAt.getTime() - now.getTime() >= 86400000
+    const candidates = await this.saved
+      .createQueryBuilder("s")
+      .innerJoin(Posting, "p", "p.id=s.posting_id")
+      .where(
+        "p.status='OPEN' AND ((p.application_deadline+1)::timestamp AT TIME ZONE p.deadline_timezone)>now() AND ((p.application_deadline+1)::timestamp AT TIME ZONE p.deadline_timezone)<now()+interval '1 day'",
       )
-        continue;
-      const saves = await this.saved.findBy({ postingId: posting.id });
-      for (const saved of saves)
-        await this.dataSource.transaction(async (manager) => {
-          const fresh = await manager
-            .getRepository(Posting)
-            .createQueryBuilder("p")
-            .setLock("pessimistic_write")
-            .where("p.id = :id", { id: posting.id })
-            .getOne();
-          if (
-            !fresh ||
-            fresh.status !== "OPEN" ||
-            deadlineInstant(
-              fresh.applicationDeadline,
-              fresh.deadlineTimezone,
-            ).getTime() <= Date.now()
-          )
-            return;
-          if (
-            await manager.getRepository(Application).exist({
-              where: { studentId: saved.studentId, postingId: posting.id },
-            })
-          )
-            return;
-          await manager
-            .getRepository(Notification)
-            .createQueryBuilder()
-            .insert()
-            .values({
-              recipientUserId: saved.studentId,
-              type: "DEADLINE",
-              title: "Saved internship closing soon",
-              targetType: "POSTING",
-              targetId: posting.id,
-              dedupeKey: `${saved.studentId}:${posting.id}:${fresh.applicationDeadline}:APPLICATION_DUE`,
-            })
-            .orIgnore()
-            .execute();
-        });
+      .andWhere(
+        "NOT EXISTS(SELECT 1 FROM notifications n WHERE n.dedupe_key=s.student_id::text||':'||p.id::text||':'||p.application_deadline::text||':APPLICATION_DUE')",
+      )
+      .andWhere(
+        "NOT EXISTS(SELECT 1 FROM applications a WHERE a.student_id=s.student_id AND a.posting_id=p.id)",
+      )
+      .orderBy("s.savedAt", "ASC")
+      .take(500)
+      .getMany();
+    for (const saved of candidates) {
+      await this.dataSource.transaction(async (manager) => {
+        const fresh = await manager
+          .getRepository(Posting)
+          .createQueryBuilder("p")
+          .setLock("pessimistic_write")
+          .where("p.id = :id", { id: saved.postingId })
+          .getOne();
+        if (
+          !fresh ||
+          fresh.status !== "OPEN" ||
+          deadlineInstant(
+            fresh.applicationDeadline,
+            fresh.deadlineTimezone,
+          ).getTime() <= Date.now()
+        )
+          return;
+        if (
+          await manager.getRepository(Application).exist({
+            where: { studentId: saved.studentId, postingId: saved.postingId },
+          })
+        )
+          return;
+        await manager
+          .getRepository(Notification)
+          .createQueryBuilder()
+          .insert()
+          .values({
+            recipientUserId: saved.studentId,
+            type: "DEADLINE",
+            title: "Saved internship closing soon",
+            targetType: "POSTING",
+            targetId: saved.postingId,
+            dedupeKey: `${saved.studentId}:${saved.postingId}:${fresh.applicationDeadline}:APPLICATION_DUE`,
+          })
+          .orIgnore()
+          .execute();
+      });
     }
     this.schedulerHealth.success();
   }
@@ -148,11 +149,13 @@ export class MaintenanceService {
     const pending = await this.documents
       .createQueryBuilder("d")
       .where(
-        "(d.state IN ('PENDING','REJECTED') AND d.created_at < :cutoff) OR d.state='DELETED'",
+        "d.storage_deleted_at IS NULL AND ((d.state IN ('PENDING','REJECTED') AND d.created_at < :cutoff) OR d.state='DELETED')",
         {
           cutoff,
         },
       )
+      .orderBy("d.created_at", "ASC")
+      .take(500)
       .getMany();
     for (const doc of pending)
       await this.dataSource.transaction(async (manager) => {
@@ -170,7 +173,16 @@ export class MaintenanceService {
           return;
         locked.state = "DELETED";
         await manager.save(locked);
-        await this.storage.remove(locked.objectKey).catch(() => undefined);
+        try {
+          await this.storage.remove(locked.objectKey);
+          await manager
+            .getRepository(Document)
+            .update(locked.id, { storageDeletedAt: new Date() });
+        } catch (error) {
+          new Logger("DocumentCleanup").warn(
+            "Object deletion failed; will retry",
+          );
+        }
       });
   }
 }

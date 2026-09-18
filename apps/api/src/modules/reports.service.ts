@@ -1,3 +1,4 @@
+import type { Report } from "../../../../packages/contracts/src";
 import {
   BadRequestException,
   ConflictException,
@@ -21,7 +22,6 @@ import { AccessService } from "./access.service";
 import { Principal, assert } from "./auth";
 import { ReportDto, ReviewDto } from "./dto";
 const trim = (value?: string) => value?.trim() || undefined;
-const size = (n?: string) => Math.min(100, Math.max(1, Number(n ?? 20) || 20));
 @Injectable()
 export class ReportsService {
   constructor(
@@ -53,7 +53,6 @@ export class ReportsService {
         .map((r) =>
           this.reportDto(
             r,
-            placement,
             p.role === "STUDENT" && placement.studentId === p.id,
           ),
         ),
@@ -103,7 +102,7 @@ export class ReportsService {
         });
       return this.saveDraftRecord(await aggregate, body, p, placement, manager);
     });
-    return this.reportDto(report, placement, true);
+    return this.reportDto(report, true);
   }
   async getReport(p: Principal, id: string) {
     const report = await this.reports.findOneBy({ id });
@@ -113,7 +112,6 @@ export class ReportsService {
       throw new NotFoundException();
     return this.reportDto(
       report,
-      placement,
       p.role === "STUDENT" && placement.studentId === p.id,
     );
   }
@@ -186,7 +184,7 @@ export class ReportsService {
       });
       return manager.save(locked);
     });
-    return this.reportDto(report, placement, true);
+    return this.reportDto(report, true);
   }
 
   async reviewReport(p: Principal, id: string, body: ReviewDto) {
@@ -246,7 +244,7 @@ export class ReportsService {
       });
       return locked;
     });
-    return this.reportDto(report, placement, false);
+    return this.reportDto(report, false);
   }
   private async saveDraft(
     report: WeeklyReport,
@@ -257,7 +255,7 @@ export class ReportsService {
     const saved = await this.dataSource.transaction((manager) =>
       this.saveDraftRecord(report, body, p, placement, manager),
     );
-    return this.reportDto(saved, placement, true);
+    return this.reportDto(saved, true);
   }
   private async saveDraftRecord(
     report: WeeklyReport,
@@ -321,11 +319,7 @@ export class ReportsService {
         .save(ids.map((documentId) => ({ reportId: locked.id, documentId })));
     return locked;
   }
-  private async reportDto(
-    report: WeeklyReport,
-    placement: Placement,
-    owner: boolean,
-  ) {
+  private async reportDto(report: WeeklyReport, owner: boolean) {
     const period = await this.periods.findOneByOrFail({
       id: report.reportingPeriodId,
     });
@@ -338,33 +332,40 @@ export class ReportsService {
           reportVersionId: In(versions.map((x) => x.id)),
         })
       : [];
-    const dto: any = {
+    const links = versions.length
+      ? await this.dataSource
+          .getRepository(ReportVersionDocument)
+          .findBy({
+            reportVersionId: In(versions.map((version) => version.id)),
+          })
+      : [];
+    const dto: Report = {
       id: report.id,
       placementId: report.placementId,
       reportingPeriodId: report.reportingPeriodId,
       weekStart: period.weekStart,
       weekEnd: period.weekEnd,
-      dueAt: period.dueAt,
+      dueAt: period.dueAt.toISOString(),
       state: report.state,
       currentVersionNo: report.currentVersionNo,
-      versions: await Promise.all(
-        versions.map(async (version) => ({
-          ...version,
-          attachmentDocumentIds: (
-            await this.dataSource
-              .getRepository(ReportVersionDocument)
-              .findBy({ reportVersionId: version.id })
-          ).map((link) => link.documentId),
-        })),
-      ),
-      reviews,
+      versions: versions.map((version) => ({
+        ...version,
+        submittedAt: version.submittedAt.toISOString(),
+        attachmentDocumentIds: links
+          .filter((link) => link.reportVersionId === version.id)
+          .map((link) => link.documentId),
+      })),
+      reviews: reviews.map((review) => ({
+        ...review,
+        reviewedAt: review.reviewedAt.toISOString(),
+      })),
     };
     if (owner && report.draftSavedAt)
       dto.draft = {
         reportingPeriodId: report.reportingPeriodId,
-        accomplishments: report.draftAccomplishments,
-        challenges: report.draftChallenges,
-        nextWeekPlan: report.draftNextWeekPlan,
+        accomplishments: report.draftAccomplishments ?? "",
+        challenges: report.draftChallenges ?? "",
+        nextWeekPlan: report.draftNextWeekPlan ?? "",
         attachmentDocumentIds: (
           await this.draftDocs.findBy({ reportId: report.id })
         ).map((x) => x.documentId),

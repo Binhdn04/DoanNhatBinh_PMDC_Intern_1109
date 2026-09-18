@@ -271,6 +271,8 @@ export class Document {
   @Column({ length: 64 }) sha256!: string;
   @Column({ default: "PENDING" })
   state!: "PENDING" | "AVAILABLE" | "REJECTED" | "DELETED";
+  @Column({ name: "storage_deleted_at", type: "timestamptz", nullable: true })
+  storageDeletedAt?: Date | null;
   @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
   @UpdateDateColumn({ name: "updated_at" }) updatedAt!: Date;
 }

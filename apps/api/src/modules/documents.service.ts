@@ -16,13 +16,9 @@ import {
   Application,
   ApplicationDocument,
   Document,
-  Placement,
-  Posting,
   ReportDraftDocument,
-  ReportVersion,
   ReportVersionDocument,
   StudentDocument,
-  WeeklyReport,
 } from "../infrastructure/database/entities";
 import { AccessService } from "./access.service";
 import { Principal } from "./auth";
@@ -30,7 +26,6 @@ import { DocumentDto } from "./dto";
 import { PrivateStorageService } from "./private-storage.service";
 const MAX_FILE = 10 * 1024 * 1024;
 const trim = (value?: string) => value?.trim() || undefined;
-const size = (n?: string) => Math.min(100, Math.max(1, Number(n ?? 20) || 20));
 function signatureMatches(bytes: Buffer, type: string) {
   if (type === "application/pdf")
     return bytes.subarray(0, 5).toString() === "%PDF-";
@@ -45,31 +40,12 @@ function signatureMatches(bytes: Buffer, type: string) {
     bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
   );
 }
-function countBy(rows: any[], field: string) {
-  return rows.reduce(
-    (out, row) => ({ ...out, [row[field]]: (out[row[field]] ?? 0) + 1 }),
-    {} as Record<string, number>,
-  );
-}
 @Injectable()
 export class DocumentsService {
   constructor(
-    @InjectRepository(Application)
-    private applications: Repository<Application>,
-    @InjectRepository(ApplicationDocument)
-    private applicationDocs: Repository<ApplicationDocument>,
-    @InjectRepository(Posting) private postings: Repository<Posting>,
-    @InjectRepository(Placement) private placements: Repository<Placement>,
     @InjectRepository(Document) private documents: Repository<Document>,
     @InjectRepository(StudentDocument)
     private studentDocuments: Repository<StudentDocument>,
-    @InjectRepository(WeeklyReport) private reports: Repository<WeeklyReport>,
-    @InjectRepository(ReportVersion)
-    private versions: Repository<ReportVersion>,
-    @InjectRepository(ReportDraftDocument)
-    private draftDocs: Repository<ReportDraftDocument>,
-    @InjectRepository(ReportVersionDocument)
-    private versionDocs: Repository<ReportVersionDocument>,
     private storage: PrivateStorageService,
     private jwt: JwtService,
     private dataSource: DataSource,
@@ -217,11 +193,15 @@ export class DocumentsService {
         .getOne();
       if (!doc) throw new NotFoundException();
       const retained = [
-        await manager.getRepository(ReportDraftDocument).countBy({ documentId: id }),
+        await manager
+          .getRepository(ReportDraftDocument)
+          .countBy({ documentId: id }),
         await manager
           .getRepository(ReportVersionDocument)
           .countBy({ documentId: id }),
-        await manager.getRepository(ApplicationDocument).countBy({ documentId: id }),
+        await manager
+          .getRepository(ApplicationDocument)
+          .countBy({ documentId: id }),
         await manager.getRepository(Application).countBy({ cvDocumentId: id }),
       ];
       if (retained.some(Boolean))
@@ -230,7 +210,12 @@ export class DocumentsService {
       await manager.save(doc);
       return doc.objectKey;
     });
-    await this.storage.remove(key).catch(() => undefined);
+    try {
+      await this.storage.remove(key);
+      await this.documents.update(id, { storageDeletedAt: new Date() });
+    } catch {
+      /* Scheduled cleanup retries this persisted deletion. */
+    }
   }
   async downloadUrl(p: Principal, id: string) {
     await this.documentAccess(p, id);
@@ -263,13 +248,6 @@ export class DocumentsService {
       "Cache-Control": "private, no-store",
     });
     return new StreamableFile(await this.storage.get(doc.objectKey));
-  }
-  private async placementAccess(p: Principal, id: string) {
-    return this.access.placement(p, id);
-  }
-  private async companyAccess(p: Principal, companyId?: string) {
-    if (!companyId) throw new ForbiddenException();
-    return this.access.company(p, companyId);
   }
   private async documentAccess(p: Principal, id: string): Promise<Document> {
     const doc = await this.documents.findOneBy({ id, state: "AVAILABLE" });
@@ -318,7 +296,15 @@ export class DocumentsService {
     method: "PUT" | "GET",
   ) {
     try {
-      const claim: any = await this.jwt.verifyAsync(token, {
+      const claim = await this.jwt.verifyAsync<{
+        sid: string;
+        documentId: string;
+        method: string;
+        exp: number;
+        size?: number;
+        sha256?: string;
+        contentType?: string;
+      }>(token, {
         secret:
           process.env.UPLOAD_TOKEN_SECRET ??
           process.env.JWT_SECRET ??

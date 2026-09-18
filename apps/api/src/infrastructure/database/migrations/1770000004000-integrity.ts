@@ -2,7 +2,9 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 export class Integrity1770000004000 implements MigrationInterface {
   async up(q: QueryRunner) {
     // NOT VALID preserves historical exceptions but enforces all new writes.
-    await q.query(`ALTER TABLE postings ADD CONSTRAINT postings_term_fk FOREIGN KEY(term_id) REFERENCES academic_terms(id) NOT VALID;
+    await q.query(`ALTER TABLE documents ADD COLUMN storage_deleted_at timestamptz;
+   CREATE INDEX documents_cleanup_idx ON documents(created_at) WHERE state IN ('PENDING','REJECTED','DELETED') AND storage_deleted_at IS NULL;
+   ALTER TABLE postings ADD CONSTRAINT postings_term_fk FOREIGN KEY(term_id) REFERENCES academic_terms(id) NOT VALID;
    ALTER TABLE placements ADD CONSTRAINT placements_ended_by_fk FOREIGN KEY(ended_by_user_id) REFERENCES users(id) NOT VALID;
    ALTER TABLE notifications ADD CONSTRAINT notifications_period_fk FOREIGN KEY(reporting_period_id) REFERENCES reporting_periods(id) NOT VALID;
    ALTER TABLE postings ADD CONSTRAINT postings_status_check CHECK(status IN ('DRAFT','OPEN','CLOSED','ARCHIVED')) NOT VALID;

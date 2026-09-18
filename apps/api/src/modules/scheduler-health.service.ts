@@ -6,6 +6,7 @@ export class SchedulerHealthService {
   private lastError?: Date;
   success() {
     this.lastSuccess = new Date();
+    this.lastError = undefined;
   }
   failure() {
     this.lastError = new Date();
@@ -15,7 +16,7 @@ export class SchedulerHealthService {
       ? Date.now() - this.lastSuccess.getTime()
       : undefined;
     return {
-      fresh: ageMs !== undefined && ageMs <= 5 * 60_000,
+      fresh: ageMs !== undefined && ageMs <= 5 * 60_000 && !this.lastError,
       lastSuccess: this.lastSuccess,
       lastError: this.lastError,
       ageMs,

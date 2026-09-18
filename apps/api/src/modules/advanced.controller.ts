@@ -174,7 +174,7 @@ export class AdvancedController {
     return this.assessmentsService.putSelf(p, id, body);
   }
   @Get("placements/:placementId/performance-evaluation")
-  @Roles("SUPERVISOR", "ADMIN")
+  @Roles("STUDENT", "SUPERVISOR", "ADMIN")
   async getEvaluation(
     @CurrentUser() p: Principal,
     @Param("placementId") id: string,

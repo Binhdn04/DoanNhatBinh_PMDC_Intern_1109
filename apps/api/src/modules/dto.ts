@@ -18,16 +18,17 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import type { Role } from "../infrastructure/database/entities";
 const roles = ["STUDENT", "COMPANY_STAFF", "SUPERVISOR", "ADMIN"];
 const text = () =>
   Transform(({ value }) => (typeof value === "string" ? value.trim() : value));
 export class SignInDto {
   @IsEmail() @MaxLength(320) email!: string;
   @IsString() @Length(1, 128) password!: string;
-  @IsOptional() @IsIn(roles) activeRole?: any;
+  @IsOptional() @IsIn(roles) activeRole?: Role;
 }
 export class RoleDto {
-  @IsIn(roles) role!: any;
+  @IsIn(roles) role!: Role;
 }
 export class ProfileDto {
   @IsOptional() @text() @IsString() @MaxLength(200) university?: string;
