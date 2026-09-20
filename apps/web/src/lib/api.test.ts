@@ -71,9 +71,7 @@ describe("API client", () => {
     vi.stubGlobal("fetch", fetchMock);
     await endpoints.setActiveRole("ADMIN");
     await endpoints.supervisors("app/id", "A B");
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      `${apiBaseUrl}/me/active-role`,
-    );
+    expect(fetchMock.mock.calls[0][0]).toBe(`${apiBaseUrl}/me/active-role`);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "PUT",
       body: JSON.stringify({ role: "ADMIN" }),
