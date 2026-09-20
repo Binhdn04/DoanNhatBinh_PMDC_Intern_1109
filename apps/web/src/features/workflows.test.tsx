@@ -1,5 +1,5 @@
-import {ReportsPage} from "./report-list";
-import {MonitoringPage} from "./monitoring";
+import { ReportsPage } from "./report-list";
+import { MonitoringPage } from "./monitoring";
 import { endpoints, ApiError, type Report } from "@/lib/api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -15,9 +15,19 @@ import type { ReactNode } from "react";
 import { ProfilePage, SkillEditor } from "./profile";
 import { PlacementPage, PlacementsPage, NotificationsPage } from "./placements";
 import { ReportDetailPage } from "./reports";
-import { ApplyPage, ApplicationsPage, ApplicationPage, ApplicationActions } from "./applications";
+import {
+  ApplyPage,
+  ApplicationsPage,
+  ApplicationPage,
+  ApplicationActions,
+} from "./applications";
 import { AssessmentPage } from "./assessment";
-import { NewPosting, PostingActions, PostingDetail, PostingsPage } from "./postings";
+import {
+  NewPosting,
+  PostingActions,
+  PostingDetail,
+  PostingsPage,
+} from "./postings";
 const session = vi.hoisted(() => ({ activeRole: "STUDENT" }));
 vi.mock("../app/session", () => ({ useSession: () => session }));
 const placement = {
@@ -112,15 +122,13 @@ it("lets students update their task and surfaces rejected updates", async () => 
 it("lets supervisors create tasks and complete the placement", async () => {
   session.activeRole = "SUPERVISOR";
   vi.spyOn(endpoints, "tasks").mockResolvedValue([]);
-  const add = vi
-    .spyOn(endpoints, "createTask")
-    .mockResolvedValue({
-      id: "t",
-      title: "Test",
-      description: "Description",
-      priority: "HIGH",
-      status: "TODO",
-    });
+  const add = vi.spyOn(endpoints, "createTask").mockResolvedValue({
+    id: "t",
+    title: "Test",
+    description: "Description",
+    priority: "HIGH",
+    status: "TODO",
+  });
   const end = vi
     .spyOn(endpoints, "placementLifecycle")
     .mockResolvedValue({ ...placement, status: "COMPLETED" });
@@ -389,30 +397,235 @@ it("renders posting details with matching evidence and handles missing records",
   mount(<PostingDetail />, "/postings/p1", "/postings/:postingId");
   expect(await screen.findByRole("alert")).toHaveTextContent("Not found");
 });
-it('loads and saves profile preferences and surfaces a retained-document deletion error',async()=>{
- vi.spyOn(endpoints,'profile').mockResolvedValue({university:'University',major:'CS'} as any);
- vi.spyOn(endpoints,'skills').mockResolvedValue([{name:'TypeScript',proficiency:'ADVANCED'}]);
- vi.spyOn(endpoints,'preferences').mockResolvedValue({industries:[],locations:[],workArrangements:[]});
- vi.spyOn(endpoints,'documents').mockResolvedValue({items:[{id:'d1',originalName:'cv.pdf',state:'AVAILABLE'}] as any});
- const update=vi.spyOn(endpoints,'updateProfile').mockResolvedValue({} as any);const prefs=vi.spyOn(endpoints,'setPreferences').mockResolvedValue({industries:['Tech'],locations:[],workArrangements:[]});vi.spyOn(endpoints,'deleteDocument').mockRejectedValue(new ApiError(409,'Document is retained'));
- mount(<ProfilePage/>);fireEvent.change(await screen.findByLabelText('Industries (comma separated)'),{target:{value:'Tech'}});fireEvent.change(screen.getByLabelText('Graduation year'),{target:{value:'2027'}});fireEvent.click(screen.getByText('Save profile'));expect(await screen.findByText('Profile saved.')).toBeVisible();expect(update).toHaveBeenCalledWith(expect.objectContaining({graduationYear:2027}));expect(prefs).toHaveBeenCalledWith(expect.objectContaining({industries:['Tech']}));fireEvent.click(screen.getByText('Delete'));expect(await screen.findByRole('alert')).toHaveTextContent('Document is retained');
- fireEvent.change(screen.getByLabelText('Upload document'),{target:{files:[new File(['bad'],'bad.exe',{type:'application/octet-stream'})]}});await waitFor(()=>expect(screen.getAllByRole('alert')).toHaveLength(2));
+it("loads and saves profile preferences and surfaces a retained-document deletion error", async () => {
+  vi.spyOn(endpoints, "profile").mockResolvedValue({
+    university: "University",
+    major: "CS",
+  } as any);
+  vi.spyOn(endpoints, "skills").mockResolvedValue([
+    { name: "TypeScript", proficiency: "ADVANCED" },
+  ]);
+  vi.spyOn(endpoints, "preferences").mockResolvedValue({
+    industries: [],
+    locations: [],
+    workArrangements: [],
+  });
+  vi.spyOn(endpoints, "documents").mockResolvedValue({
+    items: [{ id: "d1", originalName: "cv.pdf", state: "AVAILABLE" }] as any,
+  });
+  const update = vi
+    .spyOn(endpoints, "updateProfile")
+    .mockResolvedValue({} as any);
+  const prefs = vi.spyOn(endpoints, "setPreferences").mockResolvedValue({
+    industries: ["Tech"],
+    locations: [],
+    workArrangements: [],
+  });
+  vi.spyOn(endpoints, "deleteDocument").mockRejectedValue(
+    new ApiError(409, "Document is retained"),
+  );
+  mount(<ProfilePage />);
+  fireEvent.change(
+    await screen.findByLabelText("Industries (comma separated)"),
+    { target: { value: "Tech" } },
+  );
+  fireEvent.change(screen.getByLabelText("Graduation year"), {
+    target: { value: "2027" },
+  });
+  fireEvent.click(screen.getByText("Save profile"));
+  expect(await screen.findByText("Profile saved.")).toBeVisible();
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ graduationYear: 2027 }),
+  );
+  expect(prefs).toHaveBeenCalledWith(
+    expect.objectContaining({ industries: ["Tech"] }),
+  );
+  fireEvent.click(screen.getByText("Delete"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Document is retained",
+  );
+  fireEvent.change(screen.getByLabelText("Upload document"), {
+    target: {
+      files: [
+        new File(["bad"], "bad.exe", { type: "application/octet-stream" }),
+      ],
+    },
+  });
+  await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
 });
-it('shows a profile fetch failure before exposing editable fields',async()=>{
- vi.spyOn(endpoints,'profile').mockRejectedValue(new ApiError(403,'Denied'));vi.spyOn(endpoints,'skills').mockResolvedValue([]);vi.spyOn(endpoints,'preferences').mockResolvedValue({industries:[],locations:[],workArrangements:[]});vi.spyOn(endpoints,'documents').mockResolvedValue({items:[]});mount(<ProfilePage/>);expect(await screen.findByRole('alert')).toHaveTextContent('Denied');expect(screen.queryByText('Save profile')).not.toBeInTheDocument();
+it("shows a profile fetch failure before exposing editable fields", async () => {
+  vi.spyOn(endpoints, "profile").mockRejectedValue(new ApiError(403, "Denied"));
+  vi.spyOn(endpoints, "skills").mockResolvedValue([]);
+  vi.spyOn(endpoints, "preferences").mockResolvedValue({
+    industries: [],
+    locations: [],
+    workArrangements: [],
+  });
+  vi.spyOn(endpoints, "documents").mockResolvedValue({ items: [] });
+  mount(<ProfilePage />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Denied");
+  expect(screen.queryByText("Save profile")).not.toBeInTheDocument();
 });
-it('opens the acceptance form and surfaces conflicting acceptance without navigating',async()=>{
- session.activeRole='COMPANY_STAFF';vi.spyOn(endpoints,'application').mockResolvedValue({id:'a1',status:'INTERVIEW',history:[{toStatus:'INTERVIEW',changedAt:'2026-09-18'}],contactName:'Student',contactEmail:'s@example.test',coverNote:'Ready'} as any);vi.spyOn(endpoints,'supervisors').mockResolvedValue({items:[{id:'u1',fullName:'Supervisor'}]});const accept=vi.spyOn(endpoints,'accept').mockRejectedValue(new ApiError(409,'Already accepted with different dates'));mount(<ApplicationPage/>,'/applications/a1','/applications/:applicationId');fireEvent.click(await screen.findByText('Accept and create placement'));await screen.findByRole('option',{name:'Supervisor'});fireEvent.change(screen.getByLabelText(/Start date/),{target:{value:'2026-09-14'}});fireEvent.change(screen.getByLabelText(/End date/),{target:{value:'2026-12-31'}});fireEvent.change(screen.getByLabelText('Note'),{target:{value:'Approved'}});fireEvent.click(screen.getByRole('button',{name:'Accept'}));expect(await screen.findByRole('alert')).toHaveTextContent('Already accepted');expect(accept).toHaveBeenCalledWith('a1',{targetStatus:'ACCEPTED',supervisorUserId:'u1',startDate:'2026-09-14',endDate:'2026-12-31',note:'Approved'});
+it("opens the acceptance form and surfaces conflicting acceptance without navigating", async () => {
+  session.activeRole = "COMPANY_STAFF";
+  vi.spyOn(endpoints, "application").mockResolvedValue({
+    id: "a1",
+    status: "INTERVIEW",
+    history: [{ toStatus: "INTERVIEW", changedAt: "2026-09-18" }],
+    contactName: "Student",
+    contactEmail: "s@example.test",
+    coverNote: "Ready",
+  } as any);
+  vi.spyOn(endpoints, "supervisors").mockResolvedValue({
+    items: [{ id: "u1", fullName: "Supervisor" }],
+  });
+  const accept = vi
+    .spyOn(endpoints, "accept")
+    .mockRejectedValue(
+      new ApiError(409, "Already accepted with different dates"),
+    );
+  mount(
+    <ApplicationPage />,
+    "/applications/a1",
+    "/applications/:applicationId",
+  );
+  fireEvent.click(await screen.findByText("Accept and create placement"));
+  await screen.findByRole("option", { name: "Supervisor" });
+  fireEvent.change(screen.getByLabelText(/Start date/), {
+    target: { value: "2026-09-14" },
+  });
+  fireEvent.change(screen.getByLabelText(/End date/), {
+    target: { value: "2026-12-31" },
+  });
+  fireEvent.change(screen.getByLabelText("Note"), {
+    target: { value: "Approved" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Already accepted",
+  );
+  expect(accept).toHaveBeenCalledWith("a1", {
+    targetStatus: "ACCEPTED",
+    supervisorUserId: "u1",
+    startDate: "2026-09-14",
+    endDate: "2026-12-31",
+    note: "Approved",
+  });
 });
-it('offers role-specific review transitions and withdrawal while retaining terminal history',async()=>{
- session.activeRole='COMPANY_STAFF';const transition=vi.spyOn(endpoints,'transition').mockResolvedValue({} as any);mount(<ApplicationActions application={{id:'a1',status:'UNDER_REVIEW'} as any}/>);fireEvent.click(screen.getByText('Move to interview'));await waitFor(()=>expect(transition).toHaveBeenCalledWith('a1','INTERVIEW'));fireEvent.click(screen.getByText('Reject'));await waitFor(()=>expect(transition).toHaveBeenCalledWith('a1','REJECTED'));cleanup();session.activeRole='STUDENT';const withdraw=vi.spyOn(endpoints,'withdraw').mockRejectedValue(new ApiError(409,'Application changed'));mount(<ApplicationActions application={{id:'a1',status:'SUBMITTED'} as any}/>);fireEvent.click(screen.getByText('Withdraw'));expect(await screen.findByRole('alert')).toHaveTextContent('Application changed');expect(withdraw).toHaveBeenCalledWith('a1');cleanup();mount(<ApplicationActions application={{id:'a1',status:'ACCEPTED'} as any}/>);expect(screen.queryByRole('button')).not.toBeInTheDocument();
+it("offers role-specific review transitions and withdrawal while retaining terminal history", async () => {
+  session.activeRole = "COMPANY_STAFF";
+  const transition = vi
+    .spyOn(endpoints, "transition")
+    .mockResolvedValue({} as any);
+  mount(
+    <ApplicationActions
+      application={{ id: "a1", status: "UNDER_REVIEW" } as any}
+    />,
+  );
+  fireEvent.click(screen.getByText("Move to interview"));
+  await waitFor(() =>
+    expect(transition).toHaveBeenCalledWith("a1", "INTERVIEW"),
+  );
+  fireEvent.click(screen.getByText("Reject"));
+  await waitFor(() =>
+    expect(transition).toHaveBeenCalledWith("a1", "REJECTED"),
+  );
+  cleanup();
+  session.activeRole = "STUDENT";
+  const withdraw = vi
+    .spyOn(endpoints, "withdraw")
+    .mockRejectedValue(new ApiError(409, "Application changed"));
+  mount(
+    <ApplicationActions
+      application={{ id: "a1", status: "SUBMITTED" } as any}
+    />,
+  );
+  fireEvent.click(screen.getByText("Withdraw"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Application changed",
+  );
+  expect(withdraw).toHaveBeenCalledWith("a1");
+  cleanup();
+  mount(
+    <ApplicationActions
+      application={{ id: "a1", status: "ACCEPTED" } as any}
+    />,
+  );
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
-it('shows report periods with existing history and creates a draft for an unstarted period',async()=>{
- vi.spyOn(endpoints,'periods').mockResolvedValue([{id:'period',weekStart:'2026-09-14',weekEnd:'2026-09-20',dueAt:'2026-09-21'},{id:'next',weekStart:'2026-09-21',weekEnd:'2026-09-27',dueAt:'2026-09-28'}]);vi.spyOn(endpoints,'reports').mockResolvedValue([report]);mount(<ReportsPage/>,'/placements/p1/reports','/placements/:placementId/reports/*');expect(await screen.findByRole('link',{name:'Open'})).toHaveAttribute('href','/reports/r1');fireEvent.click(screen.getByText('Start'));await screen.findByText('New weekly report');const create=vi.spyOn(endpoints,'createReport').mockResolvedValue({...report,id:'r2'});for(const label of ['Accomplishments','Challenges','Next-week plan'])fireEvent.change(screen.getByLabelText(new RegExp(label)),{target:{value:label}});fireEvent.click(screen.getByText('Save draft'));await waitFor(()=>expect(create).toHaveBeenCalledWith('p1',expect.objectContaining({reportingPeriodId:'next',attachmentDocumentIds:[]})));expect(await screen.findByText('Destination')).toBeVisible();
+it("shows report periods with existing history and creates a draft for an unstarted period", async () => {
+  vi.spyOn(endpoints, "periods").mockResolvedValue([
+    {
+      id: "period",
+      weekStart: "2026-09-14",
+      weekEnd: "2026-09-20",
+      dueAt: "2026-09-21",
+    },
+    {
+      id: "next",
+      weekStart: "2026-09-21",
+      weekEnd: "2026-09-27",
+      dueAt: "2026-09-28",
+    },
+  ]);
+  vi.spyOn(endpoints, "reports").mockResolvedValue([report]);
+  mount(
+    <ReportsPage />,
+    "/placements/p1/reports",
+    "/placements/:placementId/reports/*",
+  );
+  expect(await screen.findByRole("link", { name: "Open" })).toHaveAttribute(
+    "href",
+    "/reports/r1",
+  );
+  fireEvent.click(screen.getByText("Start"));
+  await screen.findByText("New weekly report");
+  const create = vi
+    .spyOn(endpoints, "createReport")
+    .mockResolvedValue({ ...report, id: "r2" });
+  for (const label of ["Accomplishments", "Challenges", "Next-week plan"])
+    fireEvent.change(screen.getByLabelText(new RegExp(label)), {
+      target: { value: label },
+    });
+  fireEvent.click(screen.getByText("Save draft"));
+  await waitFor(() =>
+    expect(create).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        reportingPeriodId: "next",
+        attachmentDocumentIds: [],
+      }),
+    ),
+  );
+  expect(await screen.findByText("Destination")).toBeVisible();
 });
-it('renders monitoring deadlines and events from the requested scope',async()=>{
- const monitor=vi.spyOn(endpoints,'monitoring').mockResolvedValue({applications:{SUBMITTED:2},placements:{ACTIVE:1},reports:{SUBMITTED:3},deadlines:[{kind:'REPORT',dueAt:'2026-09-21'}],recentActivity:[{type:'TASK_CREATED',occurredAt:'2026-09-18'}]});mount(<MonitoringPage/>,'/monitoring?programId=program','/monitoring');expect(await screen.findByText('TASK_CREATED')).toBeVisible();expect(screen.getByText('REPORT')).toBeVisible();expect(monitor).toHaveBeenCalledWith('programId=program');
+it("renders monitoring deadlines and events from the requested scope", async () => {
+  const monitor = vi.spyOn(endpoints, "monitoring").mockResolvedValue({
+    applications: { SUBMITTED: 2 },
+    placements: { ACTIVE: 1 },
+    reports: { SUBMITTED: 3 },
+    deadlines: [{ kind: "REPORT", dueAt: "2026-09-21" }],
+    recentActivity: [{ type: "TASK_CREATED", occurredAt: "2026-09-18" }],
+  });
+  mount(<MonitoringPage />, "/monitoring?programId=program", "/monitoring");
+  expect(await screen.findByText("TASK_CREATED")).toBeVisible();
+  expect(screen.getByText("REPORT")).toBeVisible();
+  expect(monitor).toHaveBeenCalledWith("programId=program");
 });
-it('advances and returns through server-backed posting pages',async()=>{
- session.activeRole='COMPANY_STAFF';const postings=Array.from({length:20},(_,i)=>({id:`p${i}`,title:`Role ${i}`,status:'DRAFT',applicationDeadline:'2099-12-31'}));const list=vi.spyOn(endpoints,'postings').mockResolvedValue(postings as any);mount(<PostingsPage/>);fireEvent.click(await screen.findByRole('button',{name:'Next page'}));await waitFor(()=>expect(list).toHaveBeenCalledWith({page:2}));fireEvent.click(await screen.findByText('Previous page'));await waitFor(()=>expect(screen.getByText('Page 1')).toBeVisible());
+it("advances and returns through server-backed posting pages", async () => {
+  session.activeRole = "COMPANY_STAFF";
+  const postings = Array.from({ length: 20 }, (_, i) => ({
+    id: `p${i}`,
+    title: `Role ${i}`,
+    status: "DRAFT",
+    applicationDeadline: "2099-12-31",
+  }));
+  const list = vi
+    .spyOn(endpoints, "postings")
+    .mockResolvedValue(postings as any);
+  mount(<PostingsPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Next page" }));
+  await waitFor(() => expect(list).toHaveBeenCalledWith({ page: 2 }));
+  fireEvent.click(await screen.findByText("Previous page"));
+  await waitFor(() => expect(screen.getByText("Page 1")).toBeVisible());
 });

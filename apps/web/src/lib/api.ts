@@ -270,7 +270,6 @@ export const endpoints = {
     ),
   monitoring: (params = "") =>
     api<Record<string, unknown>>(`/monitoring${params ? `?${params}` : ""}`),
-
 };
 
 export async function sha256(file: File) {
