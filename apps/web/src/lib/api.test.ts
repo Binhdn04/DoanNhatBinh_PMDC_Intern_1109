@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, configureApi, endpoints, sha256, uploadDocument } from "./api";
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "/api/v1").replace(
+  /\/$/,
+  "",
+);
+
 describe("API client", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -67,14 +72,14 @@ describe("API client", () => {
     await endpoints.setActiveRole("ADMIN");
     await endpoints.supervisors("app/id", "A B");
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://localhost:3000/api/v1/me/active-role",
+      `${apiBaseUrl}/me/active-role`,
     );
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "PUT",
       body: JSON.stringify({ role: "ADMIN" }),
     });
     expect(fetchMock.mock.calls[1][0]).toBe(
-      "http://localhost:3000/api/v1/supervisors?applicationId=app%2Fid&search=A%20B",
+      `${apiBaseUrl}/supervisors?applicationId=app%2Fid&search=A%20B`,
     );
   });
 
