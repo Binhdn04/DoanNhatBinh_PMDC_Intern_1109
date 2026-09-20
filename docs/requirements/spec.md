@@ -8,7 +8,7 @@
 
 InternHub helps students find internships, apply to them, complete an internship placement, and receive transparent supervision. It also gives company staff, supervisors, and administrators the information they need to manage the relevant parts of that lifecycle.
 
-This document defines **what users can do and the rules the product must enforce**. It is authoritative when it conflicts with UI mock data, diagrams, database design, or target architecture documents.
+This document defines **what users can do and the rules the product must enforce**. It is authoritative when it conflicts with reference UI assets, diagrams, database design, or target architecture documents.
 
 The current product scope contains profiles and organizations; discovery and skill matching; applications; accepted placements, tasks, and weekly reports; evaluation; and administrative monitoring with in-app notifications.
 
@@ -118,7 +118,7 @@ The system must verify both a user's role and their relationship to the specific
 
 ## 6. Implementation status and deferred scope
 
-The current React application, use-case diagrams, UI mockups, and DBML are evidence that informed this specification. They are not the functional authority. The application currently demonstrates UI flows with mock data; persistent services, integrations, and enforcement of the rules in this document are planned rather than implemented.
+This specification remains the functional authority: it defines what the product must do, not how it is implemented. The running repository contains an API-backed React application, NestJS API, PostgreSQL migrations, private object storage integration, generated contracts, and automated tests. Use the root README, implemented OpenAPI, controller routes, migrations, and tests to determine which requirements are currently supported; design/mockup artifacts are not runtime evidence.
 
 The following are intentionally outside the current functional scope:
 
