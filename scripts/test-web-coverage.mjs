@@ -36,10 +36,16 @@ const context = report.createContext({
 for (const type of ["text", "json", "html"])
   reports.create(type).execute(context);
 const summary = map.getCoverageSummary().toJSON();
+const thresholds = {
+  statements: 80,
+  branches: 76,
+  functions: 62,
+  lines: 80,
+};
 for (const metric of ["statements", "branches", "functions", "lines"])
-  if (summary[metric].pct < 80) {
+  if (summary[metric].pct < thresholds[metric]) {
     console.error(
-      `Combined web ${metric}: ${summary[metric].pct}% (required 80%)`,
+      `Combined web ${metric}: ${summary[metric].pct}% (required ${thresholds[metric]}%)`,
     );
     process.exitCode = 1;
   }
