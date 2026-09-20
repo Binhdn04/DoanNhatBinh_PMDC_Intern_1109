@@ -1,6 +1,8 @@
 # InternHub Architecture
 
-This directory is the source of truth for the target production architecture. The current React/Vite prototype lives in `apps/web/`, is organized by frontend feature, and continues to use mock data while API, worker, shared packages, and infrastructure remain planned.
+This directory records the target architecture and historical design decisions. The running system is a React frontend, NestJS modular monolith with feature services, PostgreSQL migrations, and private object storage. Shared domain rules and contract models are consumed by the applications. Optional AI processing remains deferred.
+
+Use the [root implementation matrix](../../README.md), executable routes, and tests to determine supported behavior. Older diagrams and the refactor blueprint are design references, not implementation claims.
 
 ## Reading order
 

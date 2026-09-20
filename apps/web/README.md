@@ -4,4 +4,4 @@ React, React Router and TanStack Query with Vite. Run `pnpm dev:web` at reposito
 
 `src/app` owns routing and session state; `src/features` owns workflow pages; `src/lib/api.ts` handles bearer tokens, problem details and private transfers. Wire models are imported from `packages/contracts`. Transfer URLs resolve against the configured API origin, and unexpected origins are rejected.
 
-Commands: `pnpm test:web`, `pnpm typecheck:web`, `pnpm build:web`. `pnpm test:browser` at the root runs the four-role internship lifecycle against an isolated API/database. AI controls are disabled until a real processor exists.
+Commands: `pnpm test:web`, `pnpm typecheck:web`, `pnpm build:web`. `pnpm test:browser` at the root runs the four-role internship lifecycle against an isolated API/database. `pnpm test:coverage` combines web unit coverage and that browser journey with API unit/HTTP coverage, enforcing the 80% project gates. Install Chromium dependencies first with `pnpm exec playwright install --with-deps chromium`. AI controls are disabled until a real processor exists.
