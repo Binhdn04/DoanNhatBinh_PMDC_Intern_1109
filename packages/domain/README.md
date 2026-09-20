@@ -1,5 +1,5 @@
 # InternHub Domain
 
-**Owner:** backend team. **Status:** planned; no package dependencies are initialized here.
+**Owner:** backend team. **Status:** implemented shared rules package.
 
-This package will contain framework-independent business rules, including deterministic match scoring and application state-machine transitions.
+This package contains framework-independent lifecycle and deterministic matching rules consumed by the API and covered by package tests.

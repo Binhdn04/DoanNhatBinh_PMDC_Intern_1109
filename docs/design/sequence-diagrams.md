@@ -2,7 +2,7 @@
 
 ## Scope
 
-These target sequences follow [C4](../architecture/c4.md), [arc42](../architecture/arc42.md), [OpenAPI](../api/openapi.yaml), and [code structure](../architecture/code-structure.md). They show behavior where authorization, ordering, history, or transaction scope affects correctness. Current prototype screens are client migration references only.
+These sequences follow [C4](../architecture/c4.md), [arc42](../architecture/arc42.md), [OpenAPI](../api/openapi.yaml), and [code structure](../architecture/code-structure.md). They show behavior where authorization, ordering, history, or transaction scope affects correctness. The API-backed client consumes these flows; diagrams remain design detail rather than runtime evidence.
 
 ## Application submission and acceptance
 

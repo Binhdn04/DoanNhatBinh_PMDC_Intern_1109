@@ -2,9 +2,9 @@
 
 ## Purpose and scope
 
-This is the target PostgreSQL data model for the modular-monolith API described in [C4](../architecture/c4.md). It supports the authenticated UI flows in [screens](../ui/screens.md) and requirements RQ-01–RQ-16. PostgreSQL is the authoritative store for business data, immutable history, notifications, and AI-job state. Private object storage holds document bytes only; it is not a database or an API authority.
+This is the PostgreSQL logical model for the modular-monolith API described in [C4](../architecture/c4.md). It supports the authenticated UI flows in [screens](../ui/screens.md) and requirements RQ-01–RQ-16. PostgreSQL is the authoritative store for business data, immutable history, notifications, and AI-job state. Private object storage holds document bytes only; it is not a database or an API authority.
 
-The companion [`../data/internship_platform.dbml`](../data/internship_platform.dbml) is a legacy prototype artifact, not the target schema. It must be migrated to this design before use for implementation. In particular, the target has multi-role users and company memberships, does not persist AI interviews or AI screening scores, and keeps self-assessments separate from performance evaluations.
+The companion [`../data/internship_platform.dbml`](../data/internship_platform.dbml) and ERD are design views. The executable schema source is the TypeORM entities and ordered migrations under `apps/api/src/infrastructure/database/`. The implemented model uses multi-role users and company memberships, does not persist AI interviews or AI screening scores, and keeps self-assessments separate from performance evaluations.
 
 ## Conventions
 

@@ -2,7 +2,7 @@
 
 ## Scope
 
-This target design refines [C4](../architecture/c4.md), [arc42](../architecture/arc42.md), [OpenAPI](../api/openapi.yaml), [database design](../database/database-design.md), and [code structure](../architecture/code-structure.md). Class names are intended NestJS application/domain abstractions, not claims that planned API or worker code already exists. The current React screens and mock state are migration references only; legacy AI interview screens are not target behavior.
+This design refines [C4](../architecture/c4.md), [arc42](../architecture/arc42.md), [OpenAPI](../api/openapi.yaml), [database design](../database/database-design.md), and [code structure](../architecture/code-structure.md). Core API/domain abstractions are implemented; AI-worker abstractions remain deferred. Legacy AI interview screens are not product behavior.
 
 ## Requirement-to-code traceability
 

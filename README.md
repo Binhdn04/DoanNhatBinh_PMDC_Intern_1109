@@ -1,43 +1,147 @@
 # InternHub
 
-InternHub is an internship workflow application: React/Vite, a NestJS modular monolith, PostgreSQL, and private MinIO storage. The API and frontend are implemented. Optional AI processing is deferred and its endpoints return 503.
+[![Engineering checks](https://github.com/Binhdn04/DoanNhatBinh_PMDC_Intern_1109/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Binhdn04/DoanNhatBinh_PMDC_Intern_1109/actions/workflows/ci.yml)
 
-## Run locally
+**InternHub is a role-aware internship platform that takes a student from opportunity discovery to an auditable, supervised placement and completion.** It gives students, company staff, supervisors, and administrators one shared workflow without giving any role access to unrelated records.
 
-Use Node.js 22, pnpm 10.34.3, and Docker Compose v2.
+[Quick start](#getting-started) · [API contract](docs/api/openapi.yaml) · [Architecture](docs/architecture/README.md) · [Documentation](#detailed-documentation)
 
-```sh
-pnpm install --frozen-lockfile
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
-docker compose up -d
-pnpm db:migrate
-pnpm db:seed
-pnpm dev:api
-# In another terminal:
-pnpm dev:web
-```
-
-Open http://localhost:5173. Vite proxies `/api` to port 3000. The development seed creates `student@internhub.local`, `staff@internhub.local`, `supervisor@internhub.local`, and `admin@internhub.local`, all with password `InternHub123!`. The seed is forbidden in production. API environment variables are read from `apps/api/.env` when launched through the workspace scripts. Never use development credentials outside local development.
-
-Start with Company Staff: create and publish a posting. As Student, add skills, upload a PDF CV, and apply. Company Staff can review, interview, and accept the application with dates and a supervisor. The resulting placement supports tasks, weekly reports, revisions, assessments, and completion. No manually entered record IDs are needed for this journey.
-
-## Implementation and limits
-
-| Capability | Current behavior |
+| Delivery status | Scope |
 | --- | --- |
-| Identity | Password sign-in, expiring server-backed sessions, role switching, revocation, per-process sign-in throttling. No registration, password reset, or refresh endpoint. |
-| Discovery | Server-side keyword search, filters, bounded pagination, preference relevance and deterministic skill match. |
-| Posting/application lifecycle | Draft publication, close/archive, application submission snapshots, review/interview/rejection/withdrawal, transactional acceptance and replay. |
-| Placement | Role-and-record scoped list/detail, tasks, reports and revisions, independent assessments, completion/termination. |
-| Documents | Private streamed transfers, five-minute tokens plus session authorization, digest/signature verification, ownership and retention checks. No antivirus scanner. |
-| Monitoring/notifications | Program/term scoped aggregates and recipient-scoped inbox/read operations. In-process deadline scheduler; one API instance is the deployment baseline. |
-| Optional AI | Disabled. `apps/worker` is a design placeholder, not a running processor. |
-| Administration | Seed/database provisioning for accounts, companies, programs, and terms. A full administration UI and account recovery are deferred. |
+| **Implemented** | Authenticated, role-scoped workflows; API-backed web client; PostgreSQL persistence; private document transfers; notifications; automated checks. |
+| **Partial** | Administration is provisioned through seed/database tooling; a complete administration UI and account recovery are not available. |
+| **Deferred** | Optional AI worker and UI controls, registration, password reset, token refresh, and multi-instance scheduler deployment. AI endpoints return 503. |
 
-## Engineering checks
+## Product
 
-```sh
+Internship coordination often spans disconnected postings, applications, status updates, tasks, reports, and evaluations. InternHub makes that lifecycle visible and retains the history needed to understand who changed what.
+
+Discover → Apply → Review → Accept / create placement → Tasks and reports → Assessment → Complete
+
+The system keeps human decisions in control. Its deterministic Match Score explains skill alignment but never screens a student out or makes a hiring decision.
+
+## Requirements and delivery status
+
+| Capability | Primary actors | Outcome | Status |
+| --- | --- | --- | --- |
+| [Identity and access](docs/requirements/requirements.md#rq-01--enforce-role-and-record-ownership) | All roles | Server-backed sessions, role switching, and role-plus-record authorization. | Implemented |
+| [Discovery and matching](docs/requirements/requirements.md#rq-04--discover-and-inspect-opportunities) | Student | Search, filters, saves, and deterministic skill Match Scores for eligible postings. | Implemented |
+| [Postings and applications](docs/requirements/requirements.md#rq-03--manage-company-profiles-and-internship-postings) | Student, Company Staff, Admin | Publish opportunities, submit once, retain status history, and accept into one placement. | Implemented |
+| [Placement progress](docs/requirements/requirements.md#rq-09--view-and-manage-the-placement-lifecycle) | Student, Supervisor, Admin | Tasks, reporting periods, versioned weekly reports, review feedback, and lifecycle completion. | Implemented |
+| [Assessments](docs/requirements/requirements.md#rq-12--submit-a-student-self-assessment) | Student, Supervisor, Admin | Separate student self-assessments and evaluator performance evaluations. | Implemented |
+| [Monitoring and notifications](docs/requirements/requirements.md#rq-14--monitor-program-activity-without-changing-source-records) | Admin, all recipients | Read-only aggregates and recipient-scoped in-app notifications. | Implemented |
+
+The [functional specification](docs/requirements/spec.md) and [detailed requirements](docs/requirements/requirements.md) define product rules. The [implemented OpenAPI contract](docs/api/openapi.yaml), controllers, and tests establish the runtime surface. Optional AI explanations and report summaries are deliberately unavailable until a worker exists.
+
+## Use cases
+
+| Student | Company Staff | Supervisor | Admin |
+| --- | --- | --- | --- |
+| Build a profile, discover and save eligible opportunities, apply, track an application, complete tasks, submit reports, and self-assess. | Create and publish company postings, review company applications, and accept an applicant with placement dates and a supervisor. | Access assigned placements only; create tasks, review reports, and submit performance evaluations. | Monitor program/term activity and administer authorized records across the platform. |
+| Access is limited to the student's own records. | Access is limited to the staff member's active company membership. | Access is limited to current placement assignments. | Administrative access remains subject to server-side policy checks. |
+
+~~~mermaid
+flowchart LR
+  Staff[Company Staff<br/>publishes posting] --> Student[Student<br/>discovers and applies]
+  Student --> Review[Staff/Admin<br/>reviews application]
+  Review -->|accepted with dates + supervisor| Placement[One active placement]
+  Placement --> Supervisor[Supervisor<br/>assigns tasks and reviews reports]
+  Placement --> Progress[Student<br/>updates tasks and submits reports]
+  Supervisor --> Assessment[Separate assessments]
+  Progress --> Assessment
+  Assessment --> Complete[Supervisor/Admin<br/>completes or terminates placement]
+~~~
+
+See [actors and access rules](docs/requirements/spec.md#2-actors-and-access-rules) and the executable [four-role browser journey](tests/browser/lifecycle.spec.ts).
+
+## User experience
+
+### Discover and track an opportunity
+
+<a href="docs/screenshots/Discover.png"><img src="docs/screenshots/Discover-readme.png" alt="InternHub opportunity discovery interface with search, filters, skills, and Match Scores" width="49%"></a>
+<a href="docs/screenshots/Application.png"><img src="docs/screenshots/Application-readme.png" alt="InternHub application tracker and application status timeline" width="49%"></a>
+
+Students find eligible postings, inspect their skill alignment, submit a complete application, and retain a readable status history.
+
+### Execute the placement
+
+<a href="docs/screenshots/Internship_progress.png"><img src="docs/screenshots/Internship_progress-readme.png" alt="InternHub placement progress and task board" width="49%"></a>
+<a href="docs/screenshots/Internship_evaluation.png"><img src="docs/screenshots/Internship_evaluation-readme.png" alt="InternHub internship assessment interface" width="49%"></a>
+
+Accepted applications create one placement. Students report progress and submit reports; supervisors review and evaluate through separate role-owned records.
+
+### Oversee the program
+
+<a href="docs/screenshots/Admin.png"><img src="docs/screenshots/Admin-readme.png" alt="InternHub administrator monitoring dashboard" width="100%"></a>
+
+Administrators use read-only program and term monitoring to understand application, placement, progress, and deadline activity. Staff application review, supervisor report review, notifications, and private-document transfer are covered by the lifecycle and test flow but do not yet have dedicated README visuals.
+
+## Architecture and repository layout
+
+~~~mermaid
+flowchart TB
+  Browser[Browser] --> Web[Web SPA<br/>React 19 + Vite]
+  Web -->|REST JSON /api/v1| API[NestJS modular monolith<br/>Authorization, use cases, deadline scheduler]
+  API -->|transactions| DB[(PostgreSQL<br/>System of record)]
+  API -->|authorized transfers| Storage[(Private MinIO<br/>Document bytes)]
+  Worker[Optional AI worker<br/>Deferred / not deployed]
+  Worker -. future advisory jobs only .-> DB
+~~~
+
+- The API authorizes every protected operation by active role and record relationship; client navigation is not a security boundary.
+- PostgreSQL transactions retain application transitions, report versions, reviews, and audit-oriented records.
+- The API, not the browser, authorizes private document uploads and downloads.
+- The web client consumes generated models from the checked OpenAPI contract.
+
+~~~text
+apps/
+  web/          React, React Router, TanStack Query UI
+  api/          NestJS API, services, TypeORM migrations, seed
+  worker/       Deferred optional-AI worker placeholder
+packages/
+  domain/       Shared lifecycle and matching rules
+  contracts/    Generated OpenAPI types and client models
+docs/           Requirements, UX, architecture, API, and data design
+infra/          Container images, nginx baseline, recovery guidance
+~~~
+
+Read the [architecture overview](docs/architecture/README.md), [C4 views](docs/architecture/c4.md), and [ADRs](docs/architecture/adr/).
+
+## API and data
+
+The supported API contains **59 implemented REST operations**. It covers identity and health, student profile/discovery, postings/applications, placements/reports/evaluations, private documents, notifications, and monitoring. The complete, generated-contract source is [docs/api/openapi.yaml](docs/api/openapi.yaml); [target-openapi.yaml](docs/api/target-openapi.yaml) is a non-supported design proposal.
+
+~~~mermaid
+flowchart LR
+  User[Users and roles] --> Profile[Student / supervisor / company profiles]
+  Profile --> Posting[Companies and postings]
+  Posting --> Application[Applications and status history]
+  Application --> Placement[Placement and supervisor assignment]
+  Placement --> Progress[Tasks, reporting periods, reports, versions, reviews]
+  Placement --> Assessment[Self-assessment and performance evaluation]
+  User --> Notice[Notifications and audit events]
+  Application --> Documents[Private document metadata]
+  Progress --> Documents
+~~~
+
+PostgreSQL is the authoritative store for business records, lifecycle history, notifications, and job state. MinIO stores private document bytes; the API resolves authorization before streaming them. View the [full ERD](docs/data/database_design.png) and [database design](docs/database/database-design.md) for tables, constraints, and indexes.
+
+## Engineering quality
+
+Continuous integration runs on every push and pull request. It type-checks, checks architectural boundaries and formatting, verifies generated contract freshness, builds both applications, and executes the test suite.
+
+| Verification | Evidence |
+| --- | --- |
+| Contract and API consistency | pnpm contracts:check compares controller routes with OpenAPI and generated types. |
+| Unit and domain behavior | Jest and Vitest cover API services/controllers, web flows, and shared lifecycle/matching rules. |
+| HTTP integration | Disposable embedded PostgreSQL runs migrations and real HTTP requests without touching the development database. |
+| Browser workflow | Playwright drives the four-role lifecycle from posting through report revision and placement completion. |
+| Private storage | A separate CI job verifies integration against a real MinIO server. |
+| Coverage gate | Combined API and web checks enforce 80% statements, branches, functions, and lines. |
+
+Run the same checks locally:
+
+~~~sh
 pnpm typecheck
 pnpm lint
 pnpm format:check
@@ -48,20 +152,50 @@ pnpm test:integration
 pnpm exec playwright install --with-deps chromium
 pnpm test:browser
 pnpm test:coverage
-```
+~~~
 
-Integration tests start a disposable embedded PostgreSQL database; they never use the development database. Browser tests start their own PostgreSQL, API and Vite processes. These tests need permission to listen on local ports. By default their object-storage adapter is an in-memory test double. Set `MINIO_INTEGRATION=1` plus MinIO connection variables to run the HTTP suite against real private storage; a separate CI job does this. Local real-MinIO verification remains pending in environments without the server image. Coverage combines API unit/HTTP tests and web unit/browser tests, then enforces 80% for statements, branches, functions and lines. The unit-only web coverage command reports only that subset. Coverage thresholds remain 80%; a failing gate is a remaining quality gap, not proof that passing unit tests establish production readiness.
+See the [CI workflow](.github/workflows/ci.yml), [browser journey](tests/browser/lifecycle.spec.ts), and [API verification notes](apps/api/README.md).
 
-`lint` checks architectural boundaries (DTO bodies and controller/service separation); it is not a complete TypeScript lint configuration. CI runs typechecks, contract checks, builds, tests, coverage and the browser journey.
+## Getting started
 
-## Repository map
+Prerequisites: Node.js 22, pnpm 10.34.3, and Docker Compose v2.
 
-- `apps/api/src/modules`: thin HTTP controllers, application services, authorization, storage and scheduled maintenance.
-- `apps/api/src/infrastructure/database`: entities, immutable historical migrations, forward repairs and development seed.
-- `apps/web/src/features`: profile, opportunities, applications, placements, reports, assessments and monitoring pages.
-- `packages/domain`: pure shared lifecycle and matching rules used by the API.
-- `packages/contracts`: generated OpenAPI types and shared client models used by the frontend.
-- `docs/api/openapi.yaml`: supported HTTP surface. `target-openapi.yaml` preserves the broader design proposal and is not an implementation promise.
-- `docs`: requirements and architectural design; these may describe future scope. This README and executable routes/tests describe what currently runs.
+~~~sh
+pnpm install --frozen-lockfile
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+docker compose up -d
+pnpm db:migrate
+pnpm db:seed
+pnpm dev:api
+# In another terminal:
+pnpm dev:web
+~~~
 
-See [API setup](apps/api/README.md), [web setup](apps/web/README.md), and [deployment and recovery](infra/README.md).
+Open <http://localhost:5173>. Vite proxies /api to port 3000.
+
+<details>
+<summary>Development-only seeded accounts</summary>
+
+| Role | Email |
+| --- | --- |
+| Student | student@internhub.local |
+| Company Staff | staff@internhub.local |
+| Supervisor | supervisor@internhub.local |
+| Admin | admin@internhub.local |
+
+All seeded accounts use InternHub123!. The seed is forbidden in production; never use these credentials outside local development.
+</details>
+
+For component-specific setup and operations, see [API setup](apps/api/README.md), [web setup](apps/web/README.md), and [deployment and recovery](infra/README.md).
+
+## Detailed documentation
+
+| Area | Primary documentation |
+| --- | --- |
+| Product and requirements | [Functional specification](docs/requirements/spec.md) and [testable requirements](docs/requirements/requirements.md) |
+| UX and design | [Screen inventory](docs/ui/screens.md) and [design system](docs/ui/design-system.md) |
+| Architecture | [Architecture index](docs/architecture/README.md), [arc42](docs/architecture/arc42.md), and [ADRs](docs/architecture/adr/) |
+| API and contracts | [Implemented OpenAPI](docs/api/openapi.yaml) and [contracts package](packages/contracts/README.md) |
+| Data model | [Database design](docs/database/database-design.md) and [ERD](docs/data/database_design.png) |
+| Operations | [Infrastructure, deployment, and recovery](infra/README.md) |

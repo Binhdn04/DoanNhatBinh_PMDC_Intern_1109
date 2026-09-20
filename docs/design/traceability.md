@@ -1,6 +1,6 @@
 # Acceptance-to-contract traceability
 
-These are required implementation verification scenarios, not executed application tests. They refine RQ-01–RQ-16 and map the corrections in [design_audit.md](../../design_audit.md) to the [behavior rules](./behavior-rules.md), [OpenAPI](../api/openapi.yaml), UI, authorization, transitions, and retained data. Source paths for modules are in [code structure](../architecture/code-structure.md).
+These are required implementation verification scenarios, not executed application tests. They refine RQ-01–RQ-16 and map the documented audit corrections to the [behavior rules](./behavior-rules.md), [OpenAPI](../api/openapi.yaml), UI, authorization, transitions, and retained data. Source paths for modules are in [code structure](../architecture/code-structure.md).
 
 | Audit / requirement and criterion | UI action | API inputs → outputs | Authorization | Transition and persisted effect | Verification scenario |
 | --- | --- | --- | --- | --- | --- |

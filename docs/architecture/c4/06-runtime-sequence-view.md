@@ -1,6 +1,6 @@
 # Runtime Sequences
 
-These target-production interactions expand the [canonical C4 overview](../c4.md). The current React/Vite application remains a mock-data prototype and does not yet make these calls.
+These runtime interactions expand the [canonical C4 overview](../c4.md). The React/Vite application calls the implemented API for core workflows; the optional-AI sequence remains deferred because no worker is deployed.
 
 ## 1. Synchronous discovery and deterministic Match Score
 

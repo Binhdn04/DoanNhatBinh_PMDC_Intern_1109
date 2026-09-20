@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: InternHub API
-  version: 1.0.0-draft
+  version: 1.0.0
   description: Implemented InternHub HTTP API. Optional AI is disabled. See target-openapi.yaml
     for deferred design proposals, not supported operations.
 servers:

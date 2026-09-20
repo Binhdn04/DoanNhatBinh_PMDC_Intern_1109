@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-This document defines the target repository and source-code boundaries for InternHub. It implements the C3 component boundaries in [C4](./c4.md), the modular-monolith strategy in [arc42](./arc42.md), the REST boundary in [OpenAPI](../api/openapi.yaml), and aggregate ownership in the [database design](../database/database-design.md).
+This document records the intended repository and source-code boundaries for InternHub. It maps the C3 component boundaries in [C4](./c4.md), the modular-monolith strategy in [arc42](./arc42.md), the REST boundary in [OpenAPI](../api/openapi.yaml), and aggregate ownership in the [database design](../database/database-design.md). The running API-backed application uses the source layout in the repository; its supported behavior is established by the OpenAPI contract, controllers, migrations, and tests.
 
-It is an incremental target structure. The current `apps/web` React/Vite prototype is already feature-oriented and is retained as the frontend baseline. `apps/api`, `apps/worker`, `packages/contracts`, and `packages/domain` are planned packages; their trees describe where implementation belongs when each package is initialized.
+The web, API, domain, and contracts packages are initialized and in use. The trees below describe the structure to preserve as the codebase evolves; they are not an assertion that every listed module or subdirectory already exists. The worker directory is intentionally a deferred optional-AI placeholder.
 
 ## Repository structure
 
@@ -42,9 +42,9 @@ It is an incremental target structure. The current `apps/web` React/Vite prototy
 
 Every executable or application source file belongs under the owning application's or package's `src/` directory. Files outside `src/` are limited to package manifests and lockfiles, build or tool configuration, static delivery files, infrastructure definitions, and documentation. In particular, API controllers, migration runners, worker consumers, scripts imported by an application, contract generators, and domain rules must not be placed beside `package.json`.
 
-## Frontend organization
+## Intended frontend organization
 
-`apps/web/src` keeps its existing `app`, `features`, `shared`, and `styles` roots. The prototype's local state and mock data remain in place until their screen is migrated to the REST API; no rewrite or wholesale feature rename is required.
+The current API-backed web client keeps `app`, `features`, `lib`, `shared`, and `styles` roots. Its feature screens are presently organized as files under `features/`. The following is the intended feature-directory organization for future refactors; no rewrite or wholesale feature rename is required.
 
 ```text
 apps/web/src/
@@ -72,7 +72,7 @@ apps/web/src/
 
 A feature may add `routes`, `screens`, `ui`, `api`, and `model` subdirectories when it needs them. The feature owns its route/screen composition, feature-specific API adapter, client state, and UI; it exports a deliberate public feature entry point rather than exposing internal files.
 
-| Existing prototype folder | Incremental target ownership |
+| Current source folder | Intended ownership |
 | --- | --- |
 | `features/discovery` | `features/postings` (discovery, detail, saves, deterministic match display) |
 | `features/applications` | `features/applications` |
@@ -81,11 +81,11 @@ A feature may add `routes`, `screens`, `ui`, `api`, and `model` subdirectories w
 | `features/profile` | `features/student-profile` and `features/organizations` as responsibilities separate |
 | `features/admin` | `features/monitoring` |
 
-The current `app/AppShell.tsx`, screen callbacks, and mock data are valid prototype implementation details. Routing, session state, and API-backed feature adapters are introduced per migrated feature. Legacy interview screens are not a target API feature because AI interviews are outside the approved product scope.
+The current application shell, session state, and feature adapters are implementation details of the API-backed client. Legacy interview screens are not an API feature because AI interviews are outside the approved product scope.
 
 ## Backend and package organization
 
-### API modular monolith
+### Intended API modular monolith
 
 ```text
 apps/api/src/

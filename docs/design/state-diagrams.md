@@ -2,7 +2,7 @@
 
 ## Scope
 
-These target lifecycle rules come from the [requirements](../requirements/requirements.md), [OpenAPI](../api/openapi.yaml), and [database design](../database/database-design.md). API writes are authorized by the owning module below `apps/api/src/modules/`; current frontend mock state does not define these transitions.
+These lifecycle rules come from the [requirements](../requirements/requirements.md), [OpenAPI](../api/openapi.yaml), and [database design](../database/database-design.md). API writes are authorized by the owning module below `apps/api/src/modules/`; the API-backed frontend reflects, but does not define, these transitions.
 
 ## Posting lifecycle and derived eligibility
 

@@ -1,6 +1,6 @@
 # Target Code Structure
 
-This supplementary repository view describes the intended implementation boundaries. The API, worker, shared packages, and infrastructure remain planned; the web application currently contains a React/Vite mock-data prototype.
+This supplementary repository view describes the implemented boundaries. The web application, API, shared packages, and infrastructure are in use; only the optional-AI worker remains deferred.
 
 ```mermaid
 flowchart TB

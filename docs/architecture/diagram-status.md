@@ -1,14 +1,14 @@
 # Architecture Diagram Status
 
 **Updated:** 2026-09-15  
-**Scope:** Target production architecture for InternHub. The current `apps/web/` source remains a React/Vite UI prototype with mock data.
+**Scope:** Implemented InternHub architecture plus the deferred optional-AI extension. The current `apps/web/` source is an API-backed React/Vite application.
 
 | Diagram | Status | Location | Purpose |
 | --- | --- | --- | --- |
 | C4 context, containers, and components | Canonical | [c4 overview](./c4.md) | C1-C3 structure, three-tier mapping, dependencies, boundaries, and requirement/UI-flow mapping. |
-| Deployment | Supplementary | [deployment view](./c4/05-deployment-view.md) | Small private-network deployment baseline with AI-only worker egress. |
+| Deployment | Supplementary | [deployment view](./c4/05-deployment-view.md) | Small private-network deployment baseline; worker egress applies only if optional AI is enabled. |
 | Runtime sequences | Supplementary | [runtime sequences](./c4/06-runtime-sequence-view.md) | Core synchronous flows, transactional in-app notifications, and optional AI fallback. |
-| Code structure | Supplementary | [code structure](./c4/10-code-structure.md) | Planned monorepo boundaries and prototype-to-target separation. |
+| Code structure | Supplementary | [code structure](./c4/10-code-structure.md) | Implemented monorepo boundaries and the deferred worker extension. |
 
 ## Architecture decisions reflected
 

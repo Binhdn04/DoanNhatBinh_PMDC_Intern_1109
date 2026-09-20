@@ -18,10 +18,10 @@ The [C4 overview](./c4.md) is the structural companion to this document.
 
 | Constraint | Architectural response |
 | --- | --- |
-| Current web client | Retain the React 19, TypeScript, Vite, and Tailwind prototype as the presentation baseline. It currently uses mock data and local screen state. |
-| Backend status | NestJS API, AI worker, shared contracts/domain packages, and deployment configuration are planned only; this documentation does not implement them. |
-| Product authority | The requirements/specification override mock UI, DBML, older diagrams, and prior architecture assumptions when they conflict. |
-| Persistence | PostgreSQL-compatible relational persistence is the target system of record. Private S3-compatible storage holds file bytes. |
+| Current web client | React 19, TypeScript, Vite, and Tailwind provide the API-backed presentation layer; routing, session state, and feature pages call the REST boundary. |
+| Backend status | NestJS API, shared contracts/domain packages, PostgreSQL migrations, private storage integration, and deployment configuration are implemented. The optional AI worker alone remains deferred. |
+| Product authority | The requirements/specification define product behavior; implemented OpenAPI, controllers, migrations, and tests establish runtime support when documents diverge. |
+| Persistence | PostgreSQL is the system of record. Private S3-compatible storage holds file bytes. |
 | Documentation | Architecture documentation is English Markdown with Mermaid diagrams in Git. |
 | Product scope | Notifications are in-app only. AI is optional, advisory explanation/summarization only. AI interviews, screening, automated decisions, semantic search, and external notification delivery are excluded. |
 
@@ -123,7 +123,7 @@ This baseline supports local Docker Compose use but does not claim high availabi
 
 ## 11. Risks and technical debt
 
-- The prototype has mixed-role navigation, local mock state, and legacy interview screens; it must be replaced incrementally with role-aware, API-backed flows when implementation begins.
+- The implemented client requires continued regression coverage for role switching, authorization feedback, and deferred-AI routes as feature coverage expands.
 - The current DBML lacks `company_staff` and uses `company_admins`; it needs a company-membership model. It also contains legacy AI-interview and combined-score concepts that conflict with the current requirements.
 - The specified durable AI input snapshots, fenced leases, three-attempt retry limit, and worker interruption recovery still require implementation and fault-injection verification.
 - AI requests introduce privacy, provider availability, cost, and generated-content clarity risks. Provider output must remain visibly advisory and separate from records/decisions.
@@ -148,4 +148,4 @@ Identity validates JWT `sid`, activeRole, session version and expiry against aut
 
 The Notifications scheduler is an API lifecycle service, not an AI-worker responsibility. Every replica can scan each minute; source locks and a unique dedupe key make concurrent inserts safe. Catch-up covers still-relevant windows and overdue reports. Report periods exist before drafts and are the common source for UI, monitoring, and reminders. Health checks surface scheduler scan age above five minutes. Event and reminder creation use separate triggers but the same recipient-scoped inbox.
 
-Quality verification must include the complete [acceptance matrix](../design/traceability.md), particularly role/assignment revocation, private revision attachments, stale reviews, concurrent acceptance/replay, missed scheduler ticks and expired AI claims. This is a corrected target design; runtime sign-off requires implementation evidence.
+Quality verification must include the complete [acceptance matrix](../design/traceability.md), particularly role/assignment revocation, private revision attachments, stale reviews, concurrent acceptance/replay, missed scheduler ticks and expired AI claims. Runtime sign-off requires implementation evidence from the contract and test suite.
