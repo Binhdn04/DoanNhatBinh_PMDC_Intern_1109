@@ -333,11 +333,9 @@ export class ReportsService {
         })
       : [];
     const links = versions.length
-      ? await this.dataSource
-          .getRepository(ReportVersionDocument)
-          .findBy({
-            reportVersionId: In(versions.map((version) => version.id)),
-          })
+      ? await this.dataSource.getRepository(ReportVersionDocument).findBy({
+          reportVersionId: In(versions.map((version) => version.id)),
+        })
       : [];
     const dto: Report = {
       id: report.id,

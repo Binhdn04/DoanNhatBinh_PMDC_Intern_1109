@@ -1109,12 +1109,51 @@ it("rejects expired sessions and session/subject mismatches", async () => {
   expect((await request("other", "/me")).status).toBe(401);
 });
 it.each([
- ['image/jpeg',Buffer.from([0xff,0xd8,0xff,0xe0,1,2,3,4])],
- ['image/png',Buffer.from([137,80,78,71,13,10,26,10])],
- ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',Buffer.from([0x50,0x4b,0x03,0x04,1,2,3,4])],
-])('validates %s transfers and refuses overwriting completed documents',async(contentType,content)=>{
- const started=await request('student','/documents','POST',{originalName:'attachment',contentType,sizeBytes:content.length,sha256:createHash('sha256').update(content).digest('hex')});expect(started.status).toBe(201);
- const url=new URL(started.data.uploadUrl,origin);const upload=()=>fetch(url,{method:'PUT',headers:{authorization:`Bearer ${tokens.student}`,'content-type':contentType},body:content});
- expect((await upload()).status).toBe(204);expect((await request('student',`/documents/${started.data.document.id}/complete`,'POST')).data.state).toBe('AVAILABLE');
- expect((await upload()).status).toBe(409);expect((await request('student',`/documents/${started.data.document.id}/complete`,'POST')).data.state).toBe('AVAILABLE');
-});
+  ["image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])],
+  ["image/png", Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
+  [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]),
+  ],
+])(
+  "validates %s transfers and refuses overwriting completed documents",
+  async (contentType, content) => {
+    const started = await request("student", "/documents", "POST", {
+      originalName: "attachment",
+      contentType,
+      sizeBytes: content.length,
+      sha256: createHash("sha256").update(content).digest("hex"),
+    });
+    expect(started.status).toBe(201);
+    const url = new URL(started.data.uploadUrl, origin);
+    const upload = () =>
+      fetch(url, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${tokens.student}`,
+          "content-type": contentType,
+        },
+        body: content,
+      });
+    expect((await upload()).status).toBe(204);
+    expect(
+      (
+        await request(
+          "student",
+          `/documents/${started.data.document.id}/complete`,
+          "POST",
+        )
+      ).data.state,
+    ).toBe("AVAILABLE");
+    expect((await upload()).status).toBe(409);
+    expect(
+      (
+        await request(
+          "student",
+          `/documents/${started.data.document.id}/complete`,
+          "POST",
+        )
+      ).data.state,
+    ).toBe("AVAILABLE");
+  },
+);
