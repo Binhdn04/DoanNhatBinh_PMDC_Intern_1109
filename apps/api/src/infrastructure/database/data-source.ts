@@ -8,6 +8,7 @@ import { WorkflowHardening1770000002000 } from "./migrations/1770000002000-workf
 import { PrepareCanonicalCutover1770000002500 } from "./migrations/1770000002500-prepare-canonical-cutover";
 import { CompleteCanonicalSchema1770000003000 } from "./migrations/1770000003000-complete-canonical-schema";
 import { Integrity1770000004000 } from "./migrations/1770000004000-integrity";
+import { AdminRecovery1770000005000 } from "./migrations/1770000005000-admin-recovery";
 ConfigModule.forRoot();
 export default new DataSource({
   type: "postgres",
@@ -22,6 +23,7 @@ export default new DataSource({
     PrepareCanonicalCutover1770000002500,
     CompleteCanonicalSchema1770000003000,
     Integrity1770000004000,
+    AdminRecovery1770000005000,
   ],
   synchronize: false,
 });

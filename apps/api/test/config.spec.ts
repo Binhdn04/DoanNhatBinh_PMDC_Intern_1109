@@ -9,6 +9,9 @@ describe("production configuration", () => {
     MINIO_ACCESS_KEY: "private",
     MINIO_SECRET_KEY: "secret",
     WEB_ORIGIN: "https://internhub.example",
+    MAIL_HOST: "smtp.example",
+    MAIL_FROM: "no-reply@internhub.example",
+    APP_BASE_URL: "https://internhub.example",
   };
   it("accepts explicit production configuration and local defaults", () => {
     expect(validateEnvironment(env)).toBe(env);
@@ -22,6 +25,9 @@ describe("production configuration", () => {
     "MINIO_ACCESS_KEY",
     "MINIO_SECRET_KEY",
     "WEB_ORIGIN",
+    "MAIL_HOST",
+    "MAIL_FROM",
+    "APP_BASE_URL",
   ])("requires %s in production", (name) => {
     expect(() => validateEnvironment({ ...env, [name]: "" })).toThrow(name);
   });

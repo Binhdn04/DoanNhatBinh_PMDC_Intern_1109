@@ -16,6 +16,7 @@ export class User {
   @Column({ name: "password_hash" }) passwordHash!: string;
   @Column({ name: "full_name" }) fullName!: string;
   @Column({ nullable: true }) phone?: string;
+  @Column({ name: "is_active", default: true }) isActive!: boolean;
   @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
   @UpdateDateColumn({ name: "updated_at" }) updatedAt!: Date;
 }
@@ -33,6 +34,18 @@ export class AuthSession {
   @Column({ name: "expires_at", type: "timestamptz" }) expiresAt!: Date;
   @Column({ name: "revoked_at", type: "timestamptz", nullable: true })
   revokedAt?: Date;
+}
+@Entity("password_reset_tokens")
+export class PasswordResetToken {
+  @PrimaryGeneratedColumn("uuid") id!: string;
+  @Column({ name: "user_id", type: "uuid" }) userId!: string;
+  @Column({ name: "token_hash", length: 64, unique: true }) tokenHash!: string;
+  @Column({ name: "expires_at", type: "timestamptz" }) expiresAt!: Date;
+  @Column({ name: "used_at", type: "timestamptz", nullable: true })
+  usedAt?: Date;
+  @Column({ name: "revoked_at", type: "timestamptz", nullable: true })
+  revokedAt?: Date;
+  @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
 }
 @Entity("student_profiles")
 export class StudentProfile {
@@ -447,6 +460,7 @@ export const canonicalEntities = [
 export const entities = [
   User,
   AuthSession,
+  PasswordResetToken,
   StudentProfile,
   Company,
   Posting,

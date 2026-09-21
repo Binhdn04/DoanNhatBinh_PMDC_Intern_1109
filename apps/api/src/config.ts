@@ -8,10 +8,15 @@ export function validateEnvironment(env: Record<string, unknown>) {
       "MINIO_ACCESS_KEY",
       "MINIO_SECRET_KEY",
       "WEB_ORIGIN",
+      "MAIL_HOST",
+      "MAIL_FROM",
+      "APP_BASE_URL",
     ]) {
       if (typeof env[name] !== "string" || !(env[name] as string).trim())
         throw new Error(`${name} is required in production`);
     }
+    if (!Number.isInteger(Number(env.MAIL_PORT ?? 587)))
+      throw new Error("MAIL_PORT must be an integer");
     for (const name of ["JWT_SECRET", "UPLOAD_TOKEN_SECRET"])
       if ((env[name] as string).length < 32)
         throw new Error(`${name} must contain at least 32 characters`);
