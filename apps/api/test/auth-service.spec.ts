@@ -4,14 +4,19 @@ import * as bcrypt from "bcrypt";
 it("rejects unassigned roles and wrong credentials, throttles repeated attempts and resets the window", async () => {
   const hash = await bcrypt.hash("correct", 4);
   const users = {
-    findOneBy: jest
-      .fn()
-      .mockResolvedValue({ id: "u", email: "u@test", passwordHash: hash }),
+    findOneBy: jest.fn().mockResolvedValue({
+      id: "u",
+      email: "u@test",
+      passwordHash: hash,
+      isActive: true,
+    }),
   };
   const roles = { findBy: jest.fn().mockResolvedValue([{ role: "STUDENT" }]) };
   const service = new AuthService(
     users as any,
     roles as any,
+    {} as any,
+    {} as any,
     {} as any,
     {} as any,
   );

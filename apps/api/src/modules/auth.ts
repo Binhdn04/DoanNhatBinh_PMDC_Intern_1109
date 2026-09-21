@@ -60,6 +60,7 @@ export class SessionGuard implements CanActivate {
     if (
       !session ||
       !user ||
+      !user.isActive ||
       session.userId !== payload.id ||
       !session.expiresAt ||
       session.expiresAt.getTime() <= Date.now() ||
