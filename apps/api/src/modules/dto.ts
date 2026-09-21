@@ -1,7 +1,9 @@
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
+  IsBoolean,
   IsArray,
   IsEmail,
   IsIn,
@@ -26,6 +28,13 @@ export class SignInDto {
   @IsEmail() @MaxLength(320) email!: string;
   @IsString() @Length(1, 128) password!: string;
   @IsOptional() @IsIn(roles) activeRole?: Role;
+}
+export class PasswordResetRequestDto {
+  @IsEmail() @MaxLength(320) email!: string;
+}
+export class PasswordResetDto {
+  @IsString() @Length(32, 512) token!: string;
+  @IsString() @Length(12, 128) password!: string;
 }
 export class RoleDto {
   @IsIn(roles) role!: Role;
@@ -220,4 +229,35 @@ export class SupervisorQueryDto extends PageDto {
   @IsOptional() @IsUUID() applicationId?: string;
   @IsOptional() @IsUUID() placementId?: string;
   @IsOptional() @IsString() @MaxLength(200) search?: string;
+}
+export class AdminUserQueryDto extends PageDto {
+  @IsOptional() @IsString() @MaxLength(200) search?: string;
+}
+export class AdminAccountDto {
+  @IsISO8601() expectedUpdatedAt!: string;
+  @IsBoolean()
+  isActive!: boolean;
+}
+export class AdminRolesDto {
+  @IsISO8601() expectedUpdatedAt!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @ArrayMaxSize(4)
+  @IsIn(roles, { each: true })
+  roles!: Role[];
+}
+export class CompanyMembershipDto {
+  @IsUUID() companyId!: string;
+  @IsOptional() @text() @IsString() @MaxLength(120) title?: string;
+  @IsBoolean()
+  active!: boolean;
+}
+export class AdminMembershipsDto {
+  @IsISO8601() expectedUpdatedAt!: string;
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => CompanyMembershipDto)
+  memberships!: CompanyMembershipDto[];
 }

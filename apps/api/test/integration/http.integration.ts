@@ -612,6 +612,10 @@ it("immediately denies revoked supervisors, including linked documents", async (
     "admin",
     `/placements/${placementId}/supervisor-assignments`,
   );
+  expect(history.data[0].supervisor).toMatchObject({
+    id: ids.supervisor,
+    fullName: "supervisor",
+  });
   expect(
     (
       await request(
@@ -635,6 +639,44 @@ it("immediately denies revoked supervisors, including linked documents", async (
   expect((await request("replacement", `/reports/${reportId}`)).status).toBe(
     200,
   );
+});
+it("keeps one active Admin when concurrent account changes target each other", async () => {
+  const hash = await bcrypt.hash("Test-password1!", 4);
+  const second = await db.getRepository(User).save({
+    email: "second-admin@example.test",
+    fullName: "second admin",
+    passwordHash: hash,
+  });
+  await db.getRepository(UserRole).save({ userId: second.id, role: "ADMIN" });
+  const login = await request("", "/auth/sign-in", "POST", {
+    email: second.email,
+    password: "Test-password1!",
+  });
+  expect(login.status).toBe(201);
+  tokens.secondAdmin = login.data.accessToken;
+  const [first, secondAdmin] = await Promise.all([
+    request("admin", `/admin/users/${second.id}`),
+    request("secondAdmin", `/admin/users/${ids.admin}`),
+  ]);
+  const results = await Promise.all([
+    request("admin", `/admin/users/${second.id}/account`, "PATCH", {
+      expectedUpdatedAt: first.data.updatedAt,
+      isActive: false,
+    }),
+    request("secondAdmin", `/admin/users/${ids.admin}/account`, "PATCH", {
+      expectedUpdatedAt: secondAdmin.data.updatedAt,
+      isActive: false,
+    }),
+  ]);
+  expect(results.map((result) => result.status).sort()).toEqual([200, 400]);
+  expect(
+    await db
+      .getRepository(User)
+      .createQueryBuilder("u")
+      .innerJoin(UserRole, "r", "r.user_id=u.id AND r.role='ADMIN'")
+      .where("u.is_active=true")
+      .getCount(),
+  ).toBeGreaterThanOrEqual(1);
 });
 it("scopes monitoring, notifications and terminal writes", async () => {
   expect((await request("student", "/monitoring")).status).toBe(403);

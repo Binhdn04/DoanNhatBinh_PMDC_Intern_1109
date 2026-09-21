@@ -41,7 +41,7 @@ describe("API services and guards", () => {
       }),
     } as any;
     const users = {
-      findOneBy: jest.fn().mockResolvedValue({ id: "u1" }),
+      findOneBy: jest.fn().mockResolvedValue({ id: "u1", isActive: true }),
     } as any;
     const roles = {
       findBy: jest.fn().mockResolvedValue([{ role: "STUDENT" }]),
@@ -90,7 +90,7 @@ describe("API services and guards", () => {
           activeRole: "STUDENT",
         }),
       } as any,
-      { findOneBy: jest.fn().mockResolvedValue({}) } as any,
+      { findOneBy: jest.fn().mockResolvedValue({ isActive: true }) } as any,
       { findBy: jest.fn().mockResolvedValue([{ role: "STUDENT" }]) } as any,
     );
     await expect(

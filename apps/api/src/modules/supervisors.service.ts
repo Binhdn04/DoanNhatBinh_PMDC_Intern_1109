@@ -73,10 +73,31 @@ export class SupervisorsService {
   }
 
   async assignmentHistory(id: string) {
-    return this.assignments.find({
+    const assignments = await this.assignments.find({
       where: { placementId: id },
       order: { assignedAt: "ASC" },
     });
+    const supervisorIds = [
+      ...new Set(assignments.map((assignment) => assignment.supervisorUserId)),
+    ];
+    if (!supervisorIds.length) return [];
+    const supervisors = await this.users
+      .createQueryBuilder("u")
+      .innerJoin(SupervisorProfile, "sp", "sp.user_id=u.id")
+      .where("u.id IN (:...supervisorIds)", { supervisorIds })
+      .select([
+        "u.id AS id",
+        'u.full_name AS "fullName"',
+        "sp.department AS department",
+      ])
+      .getRawMany<{ id: string; fullName: string; department?: string }>();
+    const byId = new Map(
+      supervisors.map((supervisor) => [supervisor.id, supervisor]),
+    );
+    return assignments.map((assignment) => ({
+      ...assignment,
+      supervisor: byId.get(assignment.supervisorUserId),
+    }));
   }
 
   async changeAssignment(p: Principal, id: string, body: AssignmentDto) {

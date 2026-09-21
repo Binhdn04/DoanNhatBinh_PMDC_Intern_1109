@@ -21,6 +21,8 @@ import {
   PreferencesDto,
   ProfileDto,
   RoleDto,
+  PasswordResetDto,
+  PasswordResetRequestDto,
   SignInDto,
   SkillsDto,
   TransitionDto,
@@ -41,6 +43,17 @@ export class AuthController {
     @CurrentUser() p: Principal,
   ) {
     return this.authService.signOut(p);
+  }
+  @Post("password-reset-requests") @Public() async requestPasswordReset(
+    @Body() body: PasswordResetRequestDto,
+    @Req() req?: { ip?: string },
+  ) {
+    return this.authService.requestPasswordReset(body, req);
+  }
+  @Post("password-resets") @Public() async resetPassword(
+    @Body() body: PasswordResetDto,
+  ) {
+    return this.authService.resetPassword(body);
   }
 }
 @Controller()

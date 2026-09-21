@@ -8,6 +8,7 @@ import {
   ApplicationHistory,
   AuditEvent,
   AuthSession,
+  PasswordResetToken,
   Company,
   CompanyStaff,
   Document,
@@ -54,12 +55,15 @@ import { SchedulerHealthService } from "./scheduler-health.service";
 import { SupervisorsService } from "./supervisors.service";
 import { WorkflowsController } from "./workflows.controller";
 import { WorkflowsService } from "./workflows.service";
+import { PasswordRecoveryMailer } from "./password-recovery-mailer.service";
+import { AdminService } from "./admin.service";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       User,
       UserRole,
       AuthSession,
+      PasswordResetToken,
       StudentProfile,
       StudentPreference,
       StudentSkill,
@@ -99,6 +103,8 @@ import { WorkflowsService } from "./workflows.service";
   ],
   providers: [
     AuthService,
+    PasswordRecoveryMailer,
+    AdminService,
     IdentityService,
     ProfilesService,
     PostingsService,

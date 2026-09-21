@@ -29,6 +29,13 @@ import {
 } from "./dto";
 import { ReportsService } from "./reports.service";
 import { SupervisorsService } from "./supervisors.service";
+import { AdminService } from "./admin.service";
+import {
+  AdminAccountDto,
+  AdminMembershipsDto,
+  AdminRolesDto,
+  AdminUserQueryDto,
+} from "./dto";
 @Controller()
 export class AdvancedController {
   constructor(
@@ -37,7 +44,41 @@ export class AdvancedController {
     private readonly reportsService: ReportsService,
     private readonly assessmentsService: AssessmentsService,
     private readonly aiService: AiService,
+    private readonly adminService: AdminService,
   ) {}
+  @Get("admin/users") @Roles("ADMIN") async adminUsers(
+    @Query() query: AdminUserQueryDto,
+  ) {
+    return this.adminService.list(query);
+  }
+  @Get("admin/users/:userId") @Roles("ADMIN") async adminUser(
+    @Param("userId") id: string,
+  ) {
+    return this.adminService.get(id);
+  }
+  @Patch("admin/users/:userId/account") @Roles("ADMIN") async updateAccount(
+    @CurrentUser() p: Principal,
+    @Param("userId") id: string,
+    @Body() body: AdminAccountDto,
+  ) {
+    return this.adminService.updateAccount(p, id, body);
+  }
+  @Put("admin/users/:userId/roles") @Roles("ADMIN") async updateRoles(
+    @CurrentUser() p: Principal,
+    @Param("userId") id: string,
+    @Body() body: AdminRolesDto,
+  ) {
+    return this.adminService.updateRoles(p, id, body);
+  }
+  @Put("admin/users/:userId/company-memberships")
+  @Roles("ADMIN")
+  async updateMemberships(
+    @CurrentUser() p: Principal,
+    @Param("userId") id: string,
+    @Body() body: AdminMembershipsDto,
+  ) {
+    return this.adminService.updateMemberships(p, id, body);
+  }
   @Get("supervisors") @Roles("COMPANY_STAFF", "ADMIN") async supervisors(
     @CurrentUser() p: Principal,
     @Query() query: SupervisorQueryDto,
