@@ -1,4 +1,4 @@
-import { ApiError, endpoints } from "@/lib/api";
+import { ApiError, endpoints, type AdminUser } from "@/lib/api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -145,6 +145,56 @@ describe("ApiApp utilities and routes", () => {
     expect(
       await screen.findByText("Feature not available"),
     ).toBeInTheDocument();
+  });
+  it("resets the Admin role editor when the selected user changes or refreshes", async () => {
+    const first: AdminUser = {
+      id: "admin-1",
+      email: "first@example.test",
+      fullName: "First Admin",
+      isActive: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      roles: ["STUDENT"],
+      memberships: [],
+    };
+    const refreshed: AdminUser = {
+      ...first,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      roles: ["ADMIN"],
+    };
+    const second: AdminUser = {
+      ...first,
+      id: "admin-2",
+      email: "second@example.test",
+      fullName: "Second Admin",
+      roles: ["ADMIN"],
+    };
+    vi.spyOn(endpoints, "me").mockResolvedValue({
+      id: "u1",
+      roles: ["ADMIN"],
+      activeRole: "ADMIN",
+    });
+    vi.spyOn(endpoints, "adminUsers").mockResolvedValue({
+      items: [first, second] as any,
+      total: 2,
+    });
+    let firstCalls = 0;
+    vi.spyOn(endpoints, "adminUser").mockImplementation(async (id) => {
+      if (id === first.id) return ++firstCalls === 1 ? first : refreshed;
+      return second;
+    });
+    vi.spyOn(endpoints, "companyCatalog").mockResolvedValue([]);
+    vi.spyOn(endpoints, "updateAdminRoles").mockResolvedValue(refreshed);
+    setup("/administration/users", "ADMIN");
+    fireEvent.click(await screen.findByRole("button", { name: /First Admin/ }));
+    expect(await screen.findByLabelText("STUDENT")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save roles" }));
+    await waitFor(() => expect(screen.getByLabelText("ADMIN")).toBeChecked());
+    expect(screen.getByLabelText("STUDENT")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: /Second Admin/ }));
+    await screen.findByRole("heading", { name: "Second Admin" });
+    expect(screen.getByLabelText("ADMIN")).toBeChecked();
+    expect(screen.getByLabelText("STUDENT")).not.toBeChecked();
   });
   it("shows an API error instead of retrying an unavailable route", async () => {
     vi.spyOn(endpoints, "me").mockResolvedValue({

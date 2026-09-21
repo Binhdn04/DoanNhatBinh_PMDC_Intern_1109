@@ -1,4 +1,4 @@
-import { type ApiRole } from "@/lib/api";
+import { endpoints, type ApiRole } from "@/lib/api";
 import {
   Button,
   Card,
@@ -39,6 +39,7 @@ import { ProfilePage } from "../features/profile";
 import { ReportsPage } from "../features/report-list";
 import { ReportDetailPage } from "../features/reports";
 import { Loading } from "../features/view";
+import { AdminUsersPage } from "../features/admin";
 import { useSession } from "./session";
 
 const labels: Record<ApiRole, string> = {
@@ -128,6 +129,7 @@ function Login() {
           <Button type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </Button>
+          <Link to="/forgot-password">Forgot password?</Link>
         </form>
       </Card>
     </main>
@@ -154,6 +156,7 @@ function Shell() {
         : activeRole === "ADMIN"
           ? [
               ["/monitoring", "Monitoring"],
+              ["/administration/users", "Administration"],
               ["/postings", "Postings"],
               ["/applications", "Applications"],
             ]
@@ -227,6 +230,113 @@ function Shell() {
     </div>
   );
 }
+function ForgotPassword() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    try {
+      await endpoints.requestPasswordReset(email);
+      setSent(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Password recovery is unavailable",
+      );
+    }
+  };
+  return (
+    <main className="content" style={{ maxWidth: 520 }}>
+      <PageHeader
+        title="Reset password"
+        description="Enter your email and we will send a reset link if an active account exists."
+      />
+      <Card>
+        {sent ? (
+          <p role="status">
+            If an active account matches this email, a reset link has been sent.
+          </p>
+        ) : (
+          <form onSubmit={submit}>
+            <Field label="Email" required>
+              <TextInput
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </Field>
+            <Button type="submit">Send reset link</Button>
+            {error && <p role="alert">{error}</p>}
+          </form>
+        )}
+      </Card>
+    </main>
+  );
+}
+function ResetPassword() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    const token = new URLSearchParams(location.search).get("token");
+    if (!token) return setError("Reset link is invalid or incomplete.");
+    if (password !== confirm) return setError("Passwords do not match.");
+    try {
+      await endpoints.resetPassword(token, password);
+      setDone(true);
+      setTimeout(() => navigate("/login"), 1200);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to reset password",
+      );
+    }
+  };
+  return (
+    <main className="content" style={{ maxWidth: 520 }}>
+      <PageHeader
+        title="Choose a new password"
+        description="Use at least 12 characters."
+      />
+      <Card>
+        {done ? (
+          <p role="status">Password updated. Redirecting to sign in…</p>
+        ) : (
+          <form onSubmit={submit}>
+            <Field label="New password" required>
+              <TextInput
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={12}
+                required
+              />
+            </Field>
+            <Field label="Confirm new password" required>
+              <TextInput
+                type="password"
+                value={confirm}
+                onChange={(event) => setConfirm(event.target.value)}
+                minLength={12}
+                required
+              />
+            </Field>
+            <Button type="submit">Reset password</Button>
+            {error && <p role="alert">{error}</p>}
+          </form>
+        )}
+      </Card>
+    </main>
+  );
+}
 
 function Unavailable() {
   return (
@@ -250,6 +360,8 @@ export default function ApiApp() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireRole />}>
         <Route element={<Shell />}>
           <Route index element={<Home />} />
@@ -328,6 +440,14 @@ export default function ApiApp() {
             element={
               <RequireRole roles={["ADMIN"]}>
                 <MonitoringPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="administration/users"
+            element={
+              <RequireRole roles={["ADMIN"]}>
+                <AdminUsersPage />
               </RequireRole>
             }
           />

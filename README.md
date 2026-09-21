@@ -8,9 +8,9 @@
 
 | Delivery status | Scope |
 | --- | --- |
-| **Implemented** | Authenticated, role-scoped workflows; API-backed web client; PostgreSQL persistence; private document transfers; notifications; automated checks. |
-| **Partial** | Administration is provisioned through seed/database tooling; a complete administration UI and account recovery are not available. |
-| **Deferred** | Optional AI worker and UI controls, registration, password reset, token refresh, and multi-instance scheduler deployment. AI endpoints return 503. |
+| **Implemented** | Authenticated, role-scoped workflows; API-backed web client; PostgreSQL persistence; private document transfers; in-app notifications; Admin user/membership controls; SMTP password recovery; automated checks. |
+| **Partial** | No other partial product capability is currently identified. |
+| **Deferred** | Optional AI worker and UI controls, registration, token refresh, and multi-instance scheduler deployment. AI endpoints return 503. |
 
 ## Product
 

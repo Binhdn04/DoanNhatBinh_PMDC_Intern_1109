@@ -76,6 +76,25 @@ export function PlacementPage() {
     onSuccess: () =>
       client.invalidateQueries({ queryKey: ["placement", placementId] }),
   });
+  const assignments = useQuery({
+    queryKey: ["assignments", placementId],
+    queryFn: () => endpoints.assignmentHistory(placementId),
+    enabled: activeRole === "ADMIN",
+  });
+  const eligibleSupervisors = useQuery({
+    queryKey: ["placement-supervisors", placementId],
+    queryFn: () => endpoints.placementSupervisors(placementId),
+    enabled: activeRole === "ADMIN" && row.data?.status === "ACTIVE",
+  });
+  const changeAssignment = useMutation({
+    mutationFn: (body: {
+      expectedAssignmentId: string | null;
+      supervisorUserId: string | null;
+      reason: string;
+    }) => endpoints.changeAssignment(placementId, body),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ["assignments", placementId] }),
+  });
   const [showTask, setShowTask] = useState(false);
   const supervisor = ["SUPERVISOR", "ADMIN"].includes(activeRole);
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -86,6 +105,18 @@ export function PlacementPage() {
       description: data.get("description"),
       priority: data.get("priority"),
       dueDate: data.get("dueDate") || undefined,
+    });
+  };
+  const assignmentSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const active = assignments.data?.find(
+      (assignment) => !assignment.revokedAt,
+    );
+    changeAssignment.mutate({
+      expectedAssignmentId: active?.id ?? null,
+      supervisorUserId: String(data.get("supervisorUserId") || "") || null,
+      reason: String(data.get("reason")),
     });
   };
   if (row.isLoading) return <p>Loading…</p>;
@@ -195,6 +226,48 @@ export function PlacementPage() {
             </p>
           ))}
       </Card>
+      {activeRole === "ADMIN" && (
+        <Card>
+          <h2>Supervisor assignment</h2>
+          {assignments.error && <p role="alert">{assignments.error.message}</p>}
+          {assignments.data?.map((assignment) => (
+            <p key={assignment.id}>
+              {assignment.supervisor.fullName} · assigned{" "}
+              {assignment.assignedAt}
+              {assignment.revokedAt ? ` · revoked ${assignment.revokedAt}` : ""}
+            </p>
+          ))}
+          {row.data?.status === "ACTIVE" && (
+            <form onSubmit={assignmentSubmit}>
+              <Field label="Supervisor">
+                <SelectInput name="supervisorUserId" defaultValue="">
+                  <option value="">Unassign supervisor</option>
+                  {Array.isArray(eligibleSupervisors.data)
+                    ? eligibleSupervisors.data.map((supervisor) => (
+                        <option key={supervisor.id} value={supervisor.id}>
+                          {supervisor.fullName}
+                        </option>
+                      ))
+                    : eligibleSupervisors.data?.items?.map((supervisor) => (
+                        <option key={supervisor.id} value={supervisor.id}>
+                          {supervisor.fullName}
+                        </option>
+                      ))}
+                </SelectInput>
+              </Field>
+              <Field label="Reason" required>
+                <TextArea name="reason" required />
+              </Field>
+              <Button type="submit" disabled={changeAssignment.isPending}>
+                Save assignment
+              </Button>
+              {changeAssignment.error && (
+                <p role="alert">{changeAssignment.error.message}</p>
+              )}
+            </form>
+          )}
+        </Card>
+      )}
     </>
   );
 }

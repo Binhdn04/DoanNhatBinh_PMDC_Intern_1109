@@ -31,6 +31,27 @@ export type {
   Task,
 } from "../../../../packages/contracts/src";
 export type ApiRole = components["schemas"]["Role"];
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  roles: ApiRole[];
+  memberships: Array<{ companyId: string; title?: string; active: boolean }>;
+}
+export interface SupervisorAssignment {
+  id: string;
+  supervisor: Supervisor;
+  assignedAt: string;
+  assignedByUserId: string;
+  reason?: string;
+  revokedAt?: string;
+  revokedByUserId?: string;
+  revocationReason?: string;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -100,6 +121,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const endpoints = {
   companies: () => api<Array<{ id: string; name: string }>>("/companies/mine"),
+  companyCatalog: () => api<Array<{ id: string; name: string }>>("/companies"),
   publish: (id: string) =>
     api<Posting>(`/postings/${id}/publish`, { method: "POST" }),
   postingLifecycle: (id: string, targetStatus: string) =>
@@ -144,6 +166,16 @@ export const endpoints = {
       body: JSON.stringify({ email, password, activeRole }),
     }),
   signOut: () => api<{ ok: boolean }>("/auth/sign-out", { method: "POST" }),
+  requestPasswordReset: (email: string) =>
+    api<{ ok: boolean }>("/auth/password-reset-requests", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (token: string, password: string) =>
+    api<{ ok: boolean }>("/auth/password-resets", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
   me: () => api<{ id: string; roles: ApiRole[]; activeRole: ApiRole }>("/me"),
   setActiveRole: (role: ApiRole) =>
     api<{ activeRole: ApiRole; accessToken: string }>("/me/active-role", {
@@ -213,6 +245,26 @@ export const endpoints = {
     api<{ items?: Supervisor[] } | Supervisor[]>(
       `/supervisors?applicationId=${encodeURIComponent(applicationId)}&search=${encodeURIComponent(search)}`,
     ),
+  placementSupervisors: (placementId: string, search = "") =>
+    api<{ items?: Supervisor[] } | Supervisor[]>(
+      `/supervisors?placementId=${encodeURIComponent(placementId)}&search=${encodeURIComponent(search)}`,
+    ),
+  assignmentHistory: (placementId: string) =>
+    api<SupervisorAssignment[]>(
+      `/placements/${placementId}/supervisor-assignments`,
+    ),
+  changeAssignment: (
+    placementId: string,
+    body: {
+      expectedAssignmentId: string | null;
+      supervisorUserId: string | null;
+      reason: string;
+    },
+  ) =>
+    api<SupervisorAssignment>(
+      `/placements/${placementId}/supervisor-assignments`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
   accept: (
     id: string,
     body: {
@@ -270,6 +322,35 @@ export const endpoints = {
     ),
   monitoring: (params = "") =>
     api<Record<string, unknown>>(`/monitoring${params ? `?${params}` : ""}`),
+  adminUsers: (search = "", page = 1) =>
+    api<{ items: AdminUser[]; total: number }>(
+      `/admin/users?search=${encodeURIComponent(search)}&page=${page}`,
+    ),
+  adminUser: (id: string) => api<AdminUser>(`/admin/users/${id}`),
+  updateAdminAccount: (
+    id: string,
+    body: { expectedUpdatedAt: string; isActive: boolean },
+  ) =>
+    api<AdminUser>(`/admin/users/${id}/account`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateAdminRoles: (
+    id: string,
+    body: { expectedUpdatedAt: string; roles: ApiRole[] },
+  ) =>
+    api<AdminUser>(`/admin/users/${id}/roles`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  updateAdminMemberships: (
+    id: string,
+    body: { expectedUpdatedAt: string; memberships: AdminUser["memberships"] },
+  ) =>
+    api<AdminUser>(`/admin/users/${id}/company-memberships`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 };
 
 export async function sha256(file: File) {
