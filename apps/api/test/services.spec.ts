@@ -1,7 +1,13 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  Logger,
+} from "@nestjs/common";
 import { Readable } from "node:stream";
 import { assert, SessionGuard } from "../src/modules/auth";
 import { ProblemFilter } from "../src/modules/problem.filter";
+import { EntityNotFoundError, QueryFailedError } from "typeorm";
 import { PrivateStorageService } from "../src/modules/private-storage.service";
 import { SchedulerHealthService } from "../src/modules/scheduler-health.service";
 
@@ -159,4 +165,141 @@ describe("API services and guards", () => {
       errors: [{ field: "body", message: "name is required" }],
     });
   });
+
+  it.each([
+    [
+      "an entity-not-found error",
+      new EntityNotFoundError("User", { id: "missing" }),
+      404,
+      "Record not found",
+    ],
+    [
+      "a unique constraint error",
+      Object.assign(Object.create(QueryFailedError.prototype), {
+        driverError: { code: "23505" },
+      }),
+      409,
+      "Record already exists",
+    ],
+    [
+      "a relational constraint error",
+      Object.assign(Object.create(QueryFailedError.prototype), {
+        driverError: { code: "23503" },
+      }),
+      400,
+      "Invalid record data",
+    ],
+    [
+      "a check constraint error",
+      Object.assign(Object.create(QueryFailedError.prototype), {
+        driverError: { code: "23514" },
+      }),
+      400,
+      "Invalid record data",
+    ],
+    [
+      "an invalid-input database error",
+      Object.assign(Object.create(QueryFailedError.prototype), {
+        driverError: { code: "22P02" },
+      }),
+      400,
+      "Invalid record data",
+    ],
+  ])(
+    "maps %s to a typed problem response",
+    (_label, error, expectedStatus, detail) => {
+      const send = jest.fn();
+      const host = {
+        switchToHttp: () => ({
+          getResponse: () => ({
+            status: jest
+              .fn()
+              .mockReturnValue({ type: jest.fn().mockReturnValue({ send }) }),
+          }),
+          getRequest: () => ({ path: "/records/1", originalUrl: "/records/1" }),
+        }),
+      } as any;
+      new ProblemFilter().catch(error as any, host);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ status: expectedStatus, detail }),
+      );
+    },
+  );
+
+  it("preserves ordinary HTTP errors and logs unexpected errors with a fallback instance", () => {
+    const send = jest.fn();
+    const status = jest
+      .fn()
+      .mockReturnValue({ type: jest.fn().mockReturnValue({ send }) });
+    const host = {
+      switchToHttp: () => ({
+        getResponse: () => ({ status }),
+        getRequest: () => ({
+          method: "GET",
+          originalUrl: "/records/1?debug=true",
+        }),
+      }),
+    } as any;
+    const logger = jest
+      .spyOn(Logger.prototype, "error")
+      .mockImplementation(() => undefined);
+    new ProblemFilter().catch(new HttpException("Teapot", 418), host);
+    expect(send).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 418, detail: "Teapot" }),
+    );
+    new ProblemFilter().catch(new HttpException("Custom", 599), host);
+    expect(send).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 599, title: "Error" }),
+    );
+    new ProblemFilter().catch(new Error("boom"), host);
+    expect(send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 500,
+        detail: "Internal Server Error",
+        instance: "/records/1",
+      }),
+    );
+    expect(logger).toHaveBeenCalledWith(
+      expect.objectContaining({ error: "Error", path: undefined }),
+    );
+    new ProblemFilter().catch(null, host);
+    expect(logger).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: "UnknownError" }),
+    );
+    logger.mockRestore();
+  });
+
+  it.each(["99999", undefined])(
+    "leaves unrecognized database error code %s as an internal failure",
+    (code) => {
+      const send = jest.fn();
+      const host = {
+        switchToHttp: () => ({
+          getResponse: () => ({
+            status: jest
+              .fn()
+              .mockReturnValue({ type: jest.fn().mockReturnValue({ send }) }),
+          }),
+          getRequest: () => ({
+            method: "POST",
+            path: "/records",
+            originalUrl: "/records",
+          }),
+        }),
+      } as any;
+      const logger = jest
+        .spyOn(Logger.prototype, "error")
+        .mockImplementation(() => undefined);
+      new ProblemFilter().catch(
+        Object.assign(Object.create(QueryFailedError.prototype), {
+          driverError: { code },
+        }),
+        host,
+      );
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 500 }),
+      );
+      logger.mockRestore();
+    },
+  );
 });
