@@ -14,7 +14,7 @@ Only Admin may later assign, replace, or revoke the supervisor of an Active plac
 
 Application contact name/email, university, major, availability, cover note, and AVAILABLE owned CV are mandatory. Trim required strings and reject empty/whitespace-only values with 400 field errors. Optional phone, graduation year, and supporting documents remain optional. Profile edits never rewrite a submitted application snapshot.
 
-Acceptance requires `supervisorUserId`, `startDate`, `endDate`, and optional note. End date must not precede start date. Staff/Admin uses the eligible-supervisor lookup before confirming acceptance. Lock the application first. On INTERVIEW, recheck actor and supervisor, then atomically write ACCEPTED, immutable history with the canonical command, one placement, initial assignment, reporting periods, and one Student notification. On ACCEPTED, compare the original retained supervisor/date/note command, with absent/blank note normalized to null. An identical replay returns 200 and the existing placement link with no new writes; different input returns 409 `ACCEPTANCE_CONFLICT`. Reassignment does not alter the retained command. Other terminal transitions are rejected. Unique placement application ID and an accepted-history uniqueness constraint backstop concurrent writes; they do not replace the replay comparison.
+Acceptance requires `supervisorUserId`, `startDate`, `endDate`, and optional note. End date must not precede start date. Staff/Admin uses the eligible-supervisor lookup before confirming acceptance. `INTERVIEW -> ACCEPTED` is available only through the acceptance command; generic status transition does not accept. Lock the application first. On INTERVIEW, recheck actor and supervisor, then atomically write ACCEPTED, immutable history with the canonical command, one placement, initial assignment, reporting periods, and one Student notification. On ACCEPTED, compare the original retained supervisor/date/note command, with absent/blank note normalized to null. An identical replay returns 200 and the existing placement link with no new writes; different input returns 409 `ACCEPTANCE_CONFLICT`. Reassignment does not alter the retained command. Other terminal transitions are rejected. Unique placement application ID and an accepted-history uniqueness constraint backstop concurrent writes; they do not replace the replay comparison.
 
 ## Skill identity, scoring, and relevance
 
@@ -24,16 +24,16 @@ Publishing requires an explicitly supplied `skills` collection, which declares b
 
 For calculation version `skill-v1`, each required skill has weight 2 and each optional skill weight 1. Let D be the sum of all posting-skill weights and M the sum of weights whose canonical IDs occur in the student's skill set. If D > 0, score is `floor(100 * M / D + 0.5)` (round halves upward). If D = 0, score is 0, matched and missing lists are empty, and reason is `NO_POSTING_SKILLS`; display “No skills specified; score is not an assessment of suitability.” Otherwise reason is `SKILL_OVERLAP`. A student with no skills receives 0 and all posting skills as missing when D > 0. No synonym inference, proficiency weighting, AI, or preferences influence the score.
 
-| Required | Optional | Student skills | M / D | Score | Matched / missing |
-| --- | --- | --- | --- | --- | --- |
-| Java | SQL | Java | 2 / 3 | 67 | Java / SQL |
-| Java | SQL | SQL | 1 / 3 | 33 | SQL / Java |
-| Java | SQL | Java, SQL | 3 / 3 | 100 | Java, SQL / none |
-| Java | SQL | none | 0 / 3 | 0 | none / Java, SQL |
-| none | SQL | SQL | 1 / 1 | 100 | SQL / none |
-| none | none | Java | 0 / 0 | 0 | none / none; NO_POSTING_SKILLS |
-| A, B, C, D | none | A | 2 / 8 | 25 | A / B, C, D |
-| A, B, C | D, E | D | 1 / 8 | 13 | D / A, B, C, E |
+| Required   | Optional | Student skills | M / D | Score | Matched / missing              |
+| ---------- | -------- | -------------- | ----- | ----- | ------------------------------ |
+| Java       | SQL      | Java           | 2 / 3 | 67    | Java / SQL                     |
+| Java       | SQL      | SQL            | 1 / 3 | 33    | SQL / Java                     |
+| Java       | SQL      | Java, SQL      | 3 / 3 | 100   | Java, SQL / none               |
+| Java       | SQL      | none           | 0 / 3 | 0     | none / Java, SQL               |
+| none       | SQL      | SQL            | 1 / 1 | 100   | SQL / none                     |
+| none       | none     | Java           | 0 / 0 | 0     | none / none; NO_POSTING_SKILLS |
+| A, B, C, D | none     | A              | 2 / 8 | 25    | A / B, C, D                    |
+| A, B, C    | D, E     | D              | 1 / 8 | 13    | D / A, B, C, E                 |
 
 Keyword search filters by case-normalized substring in title, company name, or skill names. All nonempty whitespace-separated query tokens must match at least one of these fields. Explicit filters use AND. For relevance, count matching preference dimensions (0–4): company industry in preferred industries, posting location in preferred locations, work arrangement in preferred arrangements, and duration within every supplied min/max bound (inclusive). An unset dimension contributes zero. Industry/location comparison uses the same text normalization as skill names. Order relevance by this count descending, then score descending, publishedAt descending, and ID ascending. Order match_score by displayed score descending, then publishedAt descending and ID ascending. Order newest by publishedAt descending and ID ascending. Default sort is relevance. Preferences never filter candidates; empty preferences still yield a stable ordering.
 
@@ -47,11 +47,11 @@ For a placement from Wednesday 2026-09-16 through Tuesday 2026-09-22 in Asia/Ho_
 
 The API Notifications module runs an internal scheduler every 60 seconds, independently of optional AI. It queries Postings and Placements application interfaces, not their private repositories. Each API replica may scan; unique notification dedupe keys arbitrate concurrent insertion. No public scheduler endpoint exists. Each scan checks current eligibility and inserts missing reminders transactionally:
 
-| Reminder | Recipient and condition | Window | Dedupe key |
-| --- | --- | --- | --- |
-| Application closing | Student who saved the eligible posting and has never applied | `[dueAt - 24h, dueAt)` | recipient + posting ID + dueAt + APPLICATION_DUE |
-| Report due | Placement Student on Active placement; no submitted version for that period | `[dueAt - 24h, dueAt)` | recipient + period ID + REPORT_DUE |
-| Report overdue | Same Student, still no submitted version | `[dueAt, infinity)` while Active | recipient + period ID + REPORT_OVERDUE |
+| Reminder            | Recipient and condition                                                     | Window                           | Dedupe key                                       |
+| ------------------- | --------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------ |
+| Application closing | Student who saved the eligible posting and has never applied                | `[dueAt - 24h, dueAt)`           | recipient + posting ID + dueAt + APPLICATION_DUE |
+| Report due          | Placement Student on Active placement; no submitted version for that period | `[dueAt - 24h, dueAt)`           | recipient + period ID + REPORT_DUE               |
+| Report overdue      | Same Student, still no submitted version                                    | `[dueAt, infinity)` while Active | recipient + period ID + REPORT_OVERDUE           |
 
 Scans recompute all currently eligible windows, so restarting does not depend on an in-memory cursor. Expired application/upcoming windows are not backfilled; overdue-report reminders are caught up. No repeated daily overdue alerts. Source lifecycle/submission changes and scheduler inserts coordinate using source row locks through module interfaces and a shared transaction. A concurrent save/application/submission is serialized at the decision point; already-issued notifications remain historical records. Reminders deep-link to a posting or placement with reportingPeriodId even when a report does not yet exist. Monitoring reads the same calendar; it never invokes a mutation. Scheduler errors log scan age and retry next minute; deployment health flags scans older than five minutes.
 

@@ -16,14 +16,14 @@ The [C4 overview](./c4.md) is the structural companion to this document.
 
 ## 2. Constraints
 
-| Constraint | Architectural response |
-| --- | --- |
-| Current web client | React 19, TypeScript, Vite, and Tailwind provide the API-backed presentation layer; routing, session state, and feature pages call the REST boundary. |
-| Backend status | NestJS API, shared contracts/domain packages, PostgreSQL migrations, private storage integration, and deployment configuration are implemented. The optional AI worker alone remains deferred. |
-| Product authority | The requirements/specification define product behavior; implemented OpenAPI, controllers, migrations, and tests establish runtime support when documents diverge. |
-| Persistence | PostgreSQL is the system of record. Private S3-compatible storage holds file bytes. |
-| Documentation | Architecture documentation is English Markdown with Mermaid diagrams in Git. |
-| Product scope | Notifications are in-app only. AI is optional, advisory explanation/summarization only. AI interviews, screening, automated decisions, semantic search, and external notification delivery are excluded. |
+| Constraint         | Architectural response                                                                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current web client | React 19, TypeScript, Vite, and Tailwind provide the API-backed presentation layer; routing, session state, and feature pages call the REST boundary.                                                    |
+| Backend status     | NestJS API, shared contracts/domain packages, PostgreSQL migrations, private storage integration, and deployment configuration are implemented. The optional AI worker alone remains deferred.           |
+| Product authority  | The requirements/specification define product behavior; implemented OpenAPI, controllers, migrations, and tests establish runtime support when documents diverge.                                        |
+| Persistence        | PostgreSQL is the system of record. Private S3-compatible storage holds file bytes.                                                                                                                      |
+| Documentation      | Architecture documentation is English Markdown with Mermaid diagrams in Git.                                                                                                                             |
+| Product scope      | Notifications are in-app only. AI is optional, advisory explanation/summarization only. AI interviews, screening, automated decisions, semantic search, and external notification delivery are excluded. |
 
 ## 3. Context and scope
 
@@ -36,27 +36,29 @@ InternHub interacts with an LLM provider only through the AI worker for an autho
 InternHub is a three-tier modular monolith.
 
 - **Presentation tier:** a React SPA provides the documented application shell, role-specific navigation, accessible forms, lists, details, timelines, and AI advisory panels. It calls the API over HTTPS and contains no trusted authorization logic.
-- **Application tier:** a NestJS API provides REST endpoints, authentication/authorization, validations, use cases, transactions, and module boundaries. A separate worker performs only durable, optional AI jobs.
+- **Application tier:** a NestJS API provides REST endpoints, authentication/authorization, validations, use cases, transactions, and module boundaries. `packages/domain` supplies selected framework-independent aggregates and policies; a separate worker performs only durable, optional AI jobs.
 - **Data tier:** PostgreSQL is the authoritative store for business records, histories, notifications, generated-result status, and AI jobs. Private object storage contains document bytes and is accessed only through API-authorized operations.
 
 The API completes core reads and writes synchronously. It creates event notifications in the transaction that changes the source record; its internal Notifications scheduler inserts deduplicated deadline reminders every 60 seconds using the same reporting calendar. It queues AI only after authorization; core score calculation, application submission, report submission, and all human workflow decisions complete without waiting for a provider.
 
+Domain modeling is applied only where it gives a rule one clear owner. The Application, Placement, and WeeklyReport aggregates own their transition decisions; `Application.accept()` requires `AcceptanceCommand`, which owns canonical replay equality; Posting and assessment rules are small policies. NestJS services continue to coordinate authorization, locks, TypeORM transactions, constraints, history, notifications, and queries. The system does not add microservices, event sourcing, CQRS, generic repositories, or domain events for this purpose.
+
 ## 5. Building block view
 
-| Module | Owns | Important rules |
-| --- | --- | --- |
-| Identity and Access | Authenticated users, roles, access policies | Valid role and record relationship are both required. |
-| Organizations and Student Profiles | Profiles, skills, preferences, companies, memberships, supervisor assignments | Company Staff scope is company membership; supervisor scope is placement assignment. |
-| Postings and Deterministic Matching | Posting lifecycle, search, saved opportunities, score breakdown | Only eligible postings discover/apply; score is deterministic and advisory. |
-| Applications | Submission snapshots, transitions, immutable status history | One application per student/posting; accepting creates one placement. |
-| Placements and Progress | Placements, tasks, reports, review/version history | Active-state and actor ownership rules control writes. |
-| Evaluations | Separate self-assessments and performance evaluations | Never derive a combined academic grade. |
-| Monitoring | Program/term aggregates and deadlines | Read-only source-record visibility with drill-through. |
-| In-app Notifications | Recipient-scoped notification/read state | Created for required events; no external delivery. |
-| Documents | File metadata, validation, private transfers | API authorizes every operation. |
-| AI Job Orchestration | Job state and generated advisory output | No generated output can drive eligibility, workflow, task, rating, or completion decisions. |
+| Module                              | Owns                                                                          | Important rules                                                                                                                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity and Access                 | Authenticated users, roles, access policies                                   | Valid role and record relationship are both required.                                                                                                                                 |
+| Organizations and Student Profiles  | Profiles, skills, preferences, companies, memberships, supervisor assignments | Company Staff scope is company membership; supervisor scope is placement assignment.                                                                                                  |
+| Postings and Deterministic Matching | Posting lifecycle, search, saved opportunities, score breakdown               | A pure policy decides complete-draft publication and lifecycle transitions. Eligibility gates discovery and applications; the deterministic Match Score is advisory.                  |
+| Applications                        | Submission snapshots, transitions, immutable status history                   | The Application aggregate owns transitions; `ACCEPTED` requires `AcceptanceCommand` and uses it for replay. One application per student/posting and acceptance creates one placement. |
+| Placements and Progress             | Placements, tasks, reports, review/version history                            | Placement and WeeklyReport aggregates own active-state, lifecycle, draft/version, and current-version review decisions.                                                               |
+| Evaluations                         | Separate self-assessments and performance evaluations                         | Shared policies validate ratings and submission completeness; never derive a combined academic grade.                                                                                 |
+| Monitoring                          | Program/term aggregates and deadlines                                         | Read-only source-record visibility with drill-through.                                                                                                                                |
+| In-app Notifications                | Recipient-scoped notification/read state                                      | Created for required events; no external delivery.                                                                                                                                    |
+| Documents                           | File metadata, validation, private transfers                                  | API authorizes every operation.                                                                                                                                                       |
+| AI Job Orchestration                | Job state and generated advisory output                                       | No generated output can drive eligibility, workflow, task, rating, or completion decisions.                                                                                           |
 
-Modules expose application-service interfaces or domain events. A module does not reach into another module's repository/table. Application write transactions persist both the source change and required audit/notification records atomically.
+Modules expose application-service interfaces where collaboration is required. A module does not reach into another module's repository/table. Application write transactions persist both the source change and required audit/notification records atomically.
 
 ## 6. Runtime view
 
@@ -84,42 +86,42 @@ This baseline supports local Docker Compose use but does not claim high availabi
 
 ## 8. Cross-cutting concepts
 
-| Concern | Rule |
-| --- | --- |
-| Authorization | Enforce role plus organization/student/placement relationship server-side; hide disallowed UI actions but treat direct URLs as untrusted. |
-| Validation | Validate request DTOs and lifecycle transitions server-side; preserve form values client-side after recoverable errors. |
-| Audit and history | Application transitions are append-only. Report submission/review versions are retained. Historical records remain readable to authorized actors after lifecycle closure. |
-| Data integrity | Database constraints and transactional use cases enforce application uniqueness, placement creation after acceptance, report-week uniqueness, and recipient-scoped notifications. |
-| Files | Store metadata/object keys in PostgreSQL and bytes privately in object storage. Issue access only after an API authorization check. |
-| AI safety and privacy | Send only minimized authorized score/report input. Label output generated/advisory. Do not transmit credentials, unrelated profiles, or private documents. |
-| Errors | Return consistent problem responses without stack traces or secrets. AI failure is a recoverable advisory state, not a workflow error. |
-| Observability | Use structured correlation-aware logs and record authorization denials, request latency, AI-job retries/failures, and persistence errors. |
-| Accessibility | The presentation tier follows the UI design system for semantic controls, keyboard navigation, linked validation errors, contrast, responsive reflow, and text equivalents. |
+| Concern               | Rule                                                                                                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization         | Enforce role plus organization/student/placement relationship server-side; hide disallowed UI actions but treat direct URLs as untrusted.                                         |
+| Validation            | Validate request DTOs and lifecycle transitions server-side; preserve form values client-side after recoverable errors.                                                           |
+| Audit and history     | Application transitions are append-only. Report submission/review versions are retained. Historical records remain readable to authorized actors after lifecycle closure.         |
+| Data integrity        | Database constraints and transactional use cases enforce application uniqueness, placement creation after acceptance, report-week uniqueness, and recipient-scoped notifications. |
+| Files                 | Store metadata/object keys in PostgreSQL and bytes privately in object storage. Issue access only after an API authorization check.                                               |
+| AI safety and privacy | Send only minimized authorized score/report input. Label output generated/advisory. Do not transmit credentials, unrelated profiles, or private documents.                        |
+| Errors                | Return consistent problem responses without stack traces or secrets. AI failure is a recoverable advisory state, not a workflow error.                                            |
+| Observability         | Use structured correlation-aware logs and record authorization denials, request latency, AI-job retries/failures, and persistence errors.                                         |
+| Accessibility         | The presentation tier follows the UI design system for semantic controls, keyboard navigation, linked validation errors, contrast, responsive reflow, and text equivalents.       |
 
 ## 9. Architecture decisions and rationale
 
-| Decision | Rationale and trade-off |
-| --- | --- |
-| Modular monolith API | Keeps v1 simple to deploy and lets relational lifecycle changes commit atomically. It requires disciplined module interfaces to avoid a coupled monolith. |
-| REST between SPA and API | Fits the current SPA and role-aware screens with a familiar, inspectable boundary. It does not provide offline-first behavior or real-time push by itself. |
-| Server-side role-plus-record policies | UI state cannot protect data. Central policy checks protect direct links, API calls, files, and notification targets. |
-| PostgreSQL as system of record | Supports relationships, uniqueness, audits, and monitoring queries. Search begins with keyword/filter indexes; semantic search is deferred. |
-| Private object storage | Prevents binary file data from bloating relational rows while keeping authorization at the API. It adds metadata and transfer-lifecycle coordination. |
-| In-app notifications in write transactions | Guarantees required notification records accompany committed domain events without introducing an external delivery dependency. Notifications appear when the app is opened/refreshed rather than being pushed externally. |
-| AI worker for enrichment only | Isolates provider latency, retries, and privacy controls from core workflows. It adds job-operation complexity but never controls a decision. |
-| Separate evaluation aggregates | Preserves ownership and avoids falsely representing an academic grade. The UI and APIs must retain two distinct views. |
+| Decision                                   | Rationale and trade-off                                                                                                                                                                                                     |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Modular monolith API                       | Keeps v1 simple to deploy and lets relational lifecycle changes commit atomically. It requires disciplined module interfaces to avoid a coupled monolith.                                                                   |
+| REST between SPA and API                   | Fits the current SPA and role-aware screens with a familiar, inspectable boundary. It does not provide offline-first behavior or real-time push by itself.                                                                  |
+| Server-side role-plus-record policies      | UI state cannot protect data. Central policy checks protect direct links, API calls, files, and notification targets.                                                                                                       |
+| PostgreSQL as system of record             | Supports relationships, uniqueness, audits, and monitoring queries. Search begins with keyword/filter indexes; semantic search is deferred.                                                                                 |
+| Private object storage                     | Prevents binary file data from bloating relational rows while keeping authorization at the API. It adds metadata and transfer-lifecycle coordination.                                                                       |
+| In-app notifications in write transactions | Guarantees required notification records accompany committed source changes without introducing an external delivery dependency. Notifications appear when the app is opened/refreshed rather than being pushed externally. |
+| AI worker for enrichment only              | Isolates provider latency, retries, and privacy controls from core workflows. It adds job-operation complexity but never controls a decision.                                                                               |
+| Separate evaluation aggregates             | Preserves ownership and avoids falsely representing an academic grade. The UI and APIs must retain two distinct views.                                                                                                      |
 
 ## 10. Quality requirements
 
-| Scenario | Acceptance measure |
-| --- | --- |
-| Unauthorized record access | An unrelated Student, Company Staff member, or unassigned Supervisor receives no record data or permitted action. |
-| Application acceptance retry | A successful or retried acceptance yields one placement and one immutable transition history entry per completed transition. |
-| Report revision | A revision request requires feedback; resubmission retains prior submitted versions and review entries. |
-| AI outage | Discovery, deterministic scoring, applications, reports, report reading, and human decisions remain usable; source data is visible without generated output. |
-| Document isolation | A user cannot retrieve a document transfer authorization for a record they cannot view. |
-| Responsive UI | Desktop sidebar/table layouts reflow to documented compact navigation and single-column usable controls without loss of core action access. |
-| Monitoring safety | Monitoring returns scoped aggregates/deadlines and drill-through links but offers no direct source-record modification. |
+| Scenario                     | Acceptance measure                                                                                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unauthorized record access   | An unrelated Student, Company Staff member, or unassigned Supervisor receives no record data or permitted action.                                            |
+| Application acceptance retry | A successful or retried acceptance yields one placement and one immutable transition history entry per completed transition.                                 |
+| Report revision              | A revision request requires feedback; resubmission retains prior submitted versions and review entries.                                                      |
+| AI outage                    | Discovery, deterministic scoring, applications, reports, report reading, and human decisions remain usable; source data is visible without generated output. |
+| Document isolation           | A user cannot retrieve a document transfer authorization for a record they cannot view.                                                                      |
+| Responsive UI                | Desktop sidebar/table layouts reflow to documented compact navigation and single-column usable controls without loss of core action access.                  |
+| Monitoring safety            | Monitoring returns scoped aggregates/deadlines and drill-through links but offers no direct source-record modification.                                      |
 
 ## 11. Risks and technical debt
 
@@ -132,13 +134,13 @@ This baseline supports local Docker Compose use but does not claim high availabi
 
 ## 12. Glossary
 
-| Term | Meaning |
-| --- | --- |
-| Company Staff | Company member authorized for that company's records. |
-| Placement | Internship relationship created exactly once from an accepted application. |
-| Match Score | Deterministic 0-100 skill-alignment value; advisory only. |
-| In-app notification | Recipient-owned persisted event with read/unread state; not an external message. |
-| AI job | Durable optional request for generated explanation or summary, processed by the worker. |
+| Term                | Meaning                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| Company Staff       | Company member authorized for that company's records.                                   |
+| Placement           | Internship relationship created exactly once from an accepted application.              |
+| Match Score         | Deterministic 0-100 skill-alignment value; advisory only.                               |
+| In-app notification | Recipient-owned persisted event with read/unread state; not an external message.        |
+| AI job              | Durable optional request for generated explanation or summary, processed by the worker. |
 
 ## 13. Refined runtime protocols
 

@@ -72,14 +72,14 @@ apps/web/src/
 
 A feature may add `routes`, `screens`, `ui`, `api`, and `model` subdirectories when it needs them. The feature owns its route/screen composition, feature-specific API adapter, client state, and UI; it exports a deliberate public feature entry point rather than exposing internal files.
 
-| Current source folder | Intended ownership |
-| --- | --- |
-| `features/discovery` | `features/postings` (discovery, detail, saves, deterministic match display) |
-| `features/applications` | `features/applications` |
-| `features/progress` | `features/placements` (placement, tasks, reports, reviews) |
-| `features/evaluation` | `features/evaluations` |
-| `features/profile` | `features/student-profile` and `features/organizations` as responsibilities separate |
-| `features/admin` | `features/monitoring` |
+| Current source folder   | Intended ownership                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `features/discovery`    | `features/postings` (discovery, detail, saves, deterministic match display)          |
+| `features/applications` | `features/applications`                                                              |
+| `features/progress`     | `features/placements` (placement, tasks, reports, reviews)                           |
+| `features/evaluation`   | `features/evaluations`                                                               |
+| `features/profile`      | `features/student-profile` and `features/organizations` as responsibilities separate |
+| `features/admin`        | `features/monitoring`                                                                |
 
 The current application shell, session state, and feature adapters are implementation details of the API-backed client. Legacy interview screens are not an API feature because AI interviews are outside the approved product scope.
 
@@ -105,7 +105,7 @@ apps/api/src/
     └── ai-jobs/
         ├── presentation/            # controllers, request/response DTO mapping, guards
         ├── application/             # commands, queries, use cases, module interfaces
-        ├── domain/                  # aggregate-specific policy and domain events
+        ├── domain/                  # aggregate-specific policies when justified
         └── infrastructure/          # repositories and external adapters private to module
 ```
 
@@ -136,12 +136,18 @@ packages/contracts/src/
 
 packages/domain/src/
 ├── matching/                        # deterministic score calculation and breakdowns
-├── lifecycle/                       # pure application/placement/report transition rules
-├── value-objects/                   # shared framework-independent concepts
+├── lifecycle/                       # Application aggregate and AcceptanceCommand
+├── placements/                      # Placement and WeeklyReport aggregates
+├── postings/                        # posting publication and lifecycle policies
+├── assessments/                     # shared assessment submission policies
 └── index.ts                         # public package exports
 ```
 
 `packages/contracts` represents the published REST boundary and stays aligned with `docs/api/openapi.yaml`; it contains no NestJS, React, database, storage, or provider code. `packages/domain` contains deterministic, framework-independent rules and values. It does not query databases, perform I/O, read HTTP requests, or decide authorization.
+
+Domain modeling is selective. `Application`, `Placement`, and `WeeklyReport` are aggregates because their mutable state and transition invariants need a single owner. `AcceptanceCommand` is a value object because its canonical, value-based equality makes acceptance retries safe. Posting and assessment logic remains small stateless policies. No repository abstraction, domain event, CQRS layer, or module-wide domain model is introduced where the existing service is simpler.
+
+API services rehydrate these rules from TypeORM entities and coordinate locks, authorization, transactions, database constraints, history, notifications, queries, and persistence. For a report review, the service loads the actual current version by `(report_id, current_version_no)` and the `WeeklyReport` aggregate compares the requested ID against that rehydrated identity.
 
 ## Dependency rules
 
@@ -163,7 +169,7 @@ flowchart LR
 1. The browser calls the versioned REST API only. It never connects to PostgreSQL or object storage, and object keys are never public URLs.
 2. A frontend feature may import its own files, `shared`, and public exports from `packages/contracts`. It must not import another feature's internals; cross-feature composition occurs in `app` or through a published feature entry point.
 3. `shared` is dependency-downward: it cannot import a feature. Reusable UI remains presentational and does not contain authorization or product workflow decisions.
-4. API controllers validate and authorize at the REST boundary, then call the owning module's application interface. API modules collaborate through explicit application-service interfaces or domain events, never by importing another module's repository or reading/writing its tables directly.
+4. API controllers validate and authorize at the REST boundary, then call the owning module's application interface. API modules collaborate through explicit application-service interfaces, never by importing another module's repository or reading/writing its tables directly.
 5. Database, object-storage, and LLM adapters are private infrastructure. The API owns user-authorized document transfers and authoritative transactional writes. The worker has only the job/result persistence access needed to process AI jobs.
 6. `packages/contracts` may be consumed by the web, API, worker, and tests, but imports no application/package implementation. `packages/domain` may be consumed by API, worker, and tests; it imports no framework or I/O adapter.
 7. Generated AI output is advisory. It is displayed separately from source records and cannot influence eligibility, deterministic scores, lifecycle transitions, tasks, evaluations, or completion decisions.
@@ -177,16 +183,20 @@ flowchart LR
 
 ## Audit-refined source ownership
 
-| Module/path | Required design responsibility |
-| --- | --- |
-| `apps/api/src/modules/identity/application/` | Session-version validation and setActiveRole token rotation. |
-| `apps/api/src/modules/organizations/application/` | getMySkills, canonical skill resolution, eligible-supervisor query, Admin assignment commands/history; use Placements interface for lifecycle lock. |
-| `apps/api/src/modules/applications/application/` | Acceptance command normalization/replay comparison; atomic placement, assignment, calendar, history and notification creation. |
-| `apps/api/src/modules/placements/application/` | Reporting-period generation/query, private draft/attachment projections, version-conditional review under locks. |
-| `apps/api/src/modules/notifications/application/deadline-scheduler.ts` | API-owned minute scan, deadline candidate interfaces and deduplicated reminder insertion; no public scheduler endpoint. |
-| `apps/api/src/modules/documents/infrastructure/` | API streaming storage adapter; browser URLs target Documents content controllers with current authorization, never storage. |
-| `apps/api/src/modules/ai-jobs/application/` | Consistent authorized source snapshot, fingerprint, requester-scoped reuse and polling authorization. |
-| `apps/worker/src/application/` | Fenced 120-second claims, 60-second provider timeout, three-attempt retries and expired-lease recovery; job store only. |
-| `packages/domain/src/matching/` | Pure skill-v1 formula, normalization and sort rules with the published example vectors. |
+| Module/path                                                            | Required design responsibility                                                                                                                      |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/src/modules/identity/application/`                           | Session-version validation and setActiveRole token rotation.                                                                                        |
+| `apps/api/src/modules/organizations/application/`                      | getMySkills, canonical skill resolution, eligible-supervisor query, Admin assignment commands/history; use Placements interface for lifecycle lock. |
+| `apps/api/src/modules/applications/application/`                       | Acceptance command normalization/replay comparison; atomic placement, assignment, calendar, history and notification creation.                      |
+| `apps/api/src/modules/placements/application/`                         | Reporting-period generation/query, private draft/attachment projections, version-conditional review under locks.                                    |
+| `apps/api/src/modules/notifications/application/deadline-scheduler.ts` | API-owned minute scan, deadline candidate interfaces and deduplicated reminder insertion; no public scheduler endpoint.                             |
+| `apps/api/src/modules/documents/infrastructure/`                       | API streaming storage adapter; browser URLs target Documents content controllers with current authorization, never storage.                         |
+| `apps/api/src/modules/ai-jobs/application/`                            | Consistent authorized source snapshot, fingerprint, requester-scoped reuse and polling authorization.                                               |
+| `apps/worker/src/application/`                                         | Fenced 120-second claims, 60-second provider timeout, three-attempt retries and expired-lease recovery; job store only.                             |
+| `packages/domain/src/matching/`                                        | Pure skill-v1 formula, normalization and sort rules with the published example vectors.                                                             |
+| `packages/domain/src/lifecycle/`                                       | Application transitions and canonical acceptance-command replay decisions.                                                                          |
+| `packages/domain/src/placements/`                                      | Placement activity/lifecycle and weekly-report draft, version, and current-version review decisions.                                                |
+| `packages/domain/src/postings/`                                        | Publication-completeness/deadline and posting lifecycle policies.                                                                                   |
+| `packages/domain/src/assessments/`                                     | Shared 1--5 rating and submission-completeness policies.                                                                                            |
 
-See [behavior rules](../design/behavior-rules.md) and [acceptance traceability](../design/traceability.md). These are target source paths; no runtime implementation is implied.
+See [behavior rules](../design/behavior-rules.md) and [acceptance traceability](../design/traceability.md). The API module paths in this table are target paths; the `packages/domain` entries describe the current shared-domain source layout.
