@@ -20,8 +20,12 @@ import {
 } from "../infrastructure/database/entities";
 import { AccessService } from "./access.service";
 import { Principal, assert } from "./auth";
+import {
+  Placement as PlacementAggregate,
+  PlacementStatus,
+  WeeklyReport as WeeklyReportAggregate,
+} from "./core-domain";
 import { ReportDto, ReviewDto } from "./dto";
-const trim = (value?: string) => value?.trim() || undefined;
 @Injectable()
 export class ReportsService {
   constructor(
@@ -60,7 +64,12 @@ export class ReportsService {
   }
   async createDraft(p: Principal, placementId: string, body: ReportDto) {
     const placement = await this.placementAccess(p, placementId);
-    assert(placement.studentId === p.id && placement.status === "ACTIVE");
+    assert(
+      placement.studentId === p.id &&
+        PlacementAggregate.rehydrate(
+          placement.status as PlacementStatus,
+        ).canAcceptActivity(),
+    );
     if (!body.reportingPeriodId)
       throw new BadRequestException("Reporting period is required");
     const period = await this.periods.findOneBy({
@@ -82,7 +91,11 @@ export class ReportsService {
         .setLock("pessimistic_write")
         .where("p.id=:id", { id: placementId })
         .getOneOrFail();
-      if (lockedPlacement.status !== "ACTIVE")
+      if (
+        !PlacementAggregate.rehydrate(
+          lockedPlacement.status as PlacementStatus,
+        ).canAcceptActivity()
+      )
         throw new ConflictException("Placement ended");
       await manager
         .getRepository(ReportingPeriod)
@@ -121,8 +134,10 @@ export class ReportsService {
     const placement = await this.placementAccess(p, report.placementId);
     assert(
       placement.studentId === p.id &&
-        placement.status === "ACTIVE" &&
-        ["DRAFT", "REVISION_REQUESTED"].includes(report.state),
+        PlacementAggregate.rehydrate(
+          placement.status as PlacementStatus,
+        ).canAcceptActivity() &&
+        this.domainReport(report).canEditDraft(),
     );
     return this.saveDraft(report, body, p, placement);
   }
@@ -145,22 +160,23 @@ export class ReportsService {
         .where("r.id = :id", { id })
         .getOneOrFail();
       await this.access.placement(p, placement.id, manager);
-      if (
-        lockedPlacement.status !== "ACTIVE" ||
-        !["DRAFT", "REVISION_REQUESTED"].includes(locked.state)
-      )
+      const domainPlacement = PlacementAggregate.rehydrate(
+        lockedPlacement.status as PlacementStatus,
+      );
+      const domainReport = this.domainReport(locked);
+      if (!domainPlacement.canAcceptActivity() || !domainReport.canEditDraft())
         throw new ConflictException("REPORT_VERSION_CONFLICT");
-      const a = trim(locked.draftAccomplishments),
-        c = trim(locked.draftChallenges),
-        n = trim(locked.draftNextWeekPlan);
-      if (!a || !c || !n)
+      const submission = domainReport.submit();
+      if (submission.kind === "INCOMPLETE")
         throw new BadRequestException("All report fields are required");
+      if (submission.kind !== "SUBMIT")
+        throw new ConflictException("REPORT_VERSION_CONFLICT");
       const version = await manager.getRepository(ReportVersion).save({
         reportId: id,
-        versionNo: locked.currentVersionNo + 1,
-        accomplishments: a,
-        challenges: c,
-        nextWeekPlan: n,
+        versionNo: submission.versionNo,
+        accomplishments: submission.accomplishments,
+        challenges: submission.challenges,
+        nextWeekPlan: submission.nextWeekPlan,
         submittedByUserId: p.id,
       });
       const links = await manager
@@ -175,8 +191,8 @@ export class ReportsService {
         );
       await manager.getRepository(ReportDraftDocument).delete({ reportId: id });
       Object.assign(locked, {
-        state: "SUBMITTED",
-        currentVersionNo: version.versionNo,
+        state: domainReport.state,
+        currentVersionNo: domainReport.versionNo,
         draftAccomplishments: null,
         draftChallenges: null,
         draftNextWeekPlan: null,
@@ -191,10 +207,11 @@ export class ReportsService {
     const source = await this.reports.findOneBy({ id });
     if (!source) throw new NotFoundException();
     const placement = await this.placementAccess(p, source.placementId);
-    if (
-      !["APPROVED", "REVISION_REQUESTED"].includes(body.outcome) ||
-      (body.outcome === "REVISION_REQUESTED" && !trim(body.feedback))
-    )
+    const review = WeeklyReportAggregate.createReview(
+      body.outcome,
+      body.feedback,
+    );
+    if (!review)
       throw new BadRequestException("Feedback is required for revision");
     const report = await this.dataSource.transaction(async (manager) => {
       const lockedPlacement = await manager
@@ -210,32 +227,40 @@ export class ReportsService {
         .where("r.id = :id", { id })
         .getOneOrFail();
       await this.access.placement(p, placement.id, manager);
-      if (lockedPlacement.status !== "ACTIVE" || locked.state !== "SUBMITTED")
+      const domainPlacement = PlacementAggregate.rehydrate(
+        lockedPlacement.status as PlacementStatus,
+      );
+      if (!domainPlacement.canAcceptActivity())
         throw new ConflictException("REPORT_VERSION_CONFLICT");
-      const version = await manager.getRepository(ReportVersion).findOneBy({
-        id: body.reportVersionId,
-        reportId: id,
-        versionNo: locked.currentVersionNo,
-      });
-      if (
-        !version ||
-        (await manager
-          .getRepository(ReportReview)
-          .exist({ where: { reportVersionId: body.reportVersionId } }))
-      )
+      const currentVersion = await manager
+        .getRepository(ReportVersion)
+        .findOneBy({
+          reportId: id,
+          versionNo: locked.currentVersionNo,
+        });
+      const domainReport = this.domainReport(locked, currentVersion?.id);
+      const alreadyReviewed = await manager
+        .getRepository(ReportReview)
+        .exist({ where: { reportVersionId: body.reportVersionId } });
+      const reviewedVersionId = domainReport.review(
+        review,
+        body.reportVersionId,
+        alreadyReviewed,
+      );
+      if (!reviewedVersionId)
         throw new ConflictException("REPORT_VERSION_CONFLICT");
       await manager.getRepository(ReportReview).save({
-        reportVersionId: version.id,
-        outcome: body.outcome,
-        feedback: trim(body.feedback),
+        reportVersionId: reviewedVersionId,
+        outcome: review.outcome,
+        feedback: review.feedback,
         reviewedByUserId: p.id,
       });
-      locked.state = body.outcome;
+      locked.state = domainReport.state;
       await manager.save(locked);
       await manager.getRepository(Notification).save({
         recipientUserId: lockedPlacement.studentId,
         type:
-          body.outcome === "APPROVED"
+          review.outcome === "APPROVED"
             ? "REPORT_FEEDBACK"
             : "REPORT_REVISION_REQUESTED",
         title: "Report reviewed",
@@ -270,7 +295,11 @@ export class ReportsService {
       .setLock("pessimistic_write")
       .where("p.id=:id", { id: placement.id })
       .getOneOrFail();
-    if (currentPlacement.status !== "ACTIVE")
+    if (
+      !PlacementAggregate.rehydrate(
+        currentPlacement.status as PlacementStatus,
+      ).canAcceptActivity()
+    )
       throw new ConflictException("Placement ended");
     const reports = manager.getRepository(WeeklyReport);
     const locked = await reports
@@ -278,7 +307,8 @@ export class ReportsService {
       .setLock("pessimistic_write")
       .where("r.id = :id", { id: report.id })
       .getOneOrFail();
-    if (!["DRAFT", "REVISION_REQUESTED"].includes(locked.state))
+    const domainReport = this.domainReport(locked);
+    if (!domainReport.canEditDraft())
       throw new ConflictException("Report is not editable");
     if (
       body.reportingPeriodId &&
@@ -303,10 +333,17 @@ export class ReportsService {
       throw new BadRequestException(
         "Attachments must be owned available documents",
       );
+    domainReport.saveDraft({
+      accomplishments: body.accomplishments,
+      challenges: body.challenges,
+      nextWeekPlan: body.nextWeekPlan,
+      attachmentDocumentIds: ids,
+    });
+    const draft = domainReport.draft;
     Object.assign(locked, {
-      draftAccomplishments: body.accomplishments ?? "",
-      draftChallenges: body.challenges ?? "",
-      draftNextWeekPlan: body.nextWeekPlan ?? "",
+      draftAccomplishments: draft.accomplishments,
+      draftChallenges: draft.challenges,
+      draftNextWeekPlan: draft.nextWeekPlan,
       draftSavedAt: new Date(),
     });
     await reports.save(locked);
@@ -314,9 +351,12 @@ export class ReportsService {
       .getRepository(ReportDraftDocument)
       .delete({ reportId: locked.id });
     if (ids.length)
-      await manager
-        .getRepository(ReportDraftDocument)
-        .save(ids.map((documentId) => ({ reportId: locked.id, documentId })));
+      await manager.getRepository(ReportDraftDocument).save(
+        draft.attachmentDocumentIds.map((documentId) => ({
+          reportId: locked.id,
+          documentId,
+        })),
+      );
     return locked;
   }
   private async reportDto(report: WeeklyReport, owner: boolean) {
@@ -372,5 +412,20 @@ export class ReportsService {
   }
   private async placementAccess(p: Principal, id: string) {
     return this.access.placement(p, id);
+  }
+  private domainReport(
+    report: WeeklyReport,
+    currentVersionId?: string,
+  ): WeeklyReportAggregate {
+    return WeeklyReportAggregate.rehydrate({
+      state: report.state,
+      currentVersionNo: report.currentVersionNo,
+      currentVersionId,
+      draft: {
+        accomplishments: report.draftAccomplishments,
+        challenges: report.draftChallenges,
+        nextWeekPlan: report.draftNextWeekPlan,
+      },
+    });
   }
 }

@@ -17,6 +17,12 @@ import {
 import { AccessService } from "./access.service";
 import { Principal } from "./auth";
 import { deadlineInstant } from "./calendar";
+import {
+  canPublishPosting,
+  canTransitionPosting,
+  Placement as PlacementAggregate,
+  PlacementStatus,
+} from "./core-domain";
 import { LifecycleDto, PageDto, ScopeDto, TaskDto } from "./dto";
 @Injectable()
 export class WorkflowsService {
@@ -50,14 +56,19 @@ export class WorkflowsService {
       if (!posting) throw new NotFoundException();
       await this.access.company(p, posting.companyId, m);
       if (
-        posting.status !== "DRAFT" ||
-        !posting.skillsDeclared ||
-        !posting.title.trim() ||
-        !posting.description.trim() ||
-        deadlineInstant(
-          posting.applicationDeadline,
-          posting.deadlineTimezone,
-        ).getTime() <= Date.now()
+        !canPublishPosting(
+          {
+            status: posting.status,
+            title: posting.title,
+            description: posting.description,
+            skillsDeclared: posting.skillsDeclared,
+            deadlineAt: deadlineInstant(
+              posting.applicationDeadline,
+              posting.deadlineTimezone,
+            ),
+          },
+          new Date(),
+        )
       )
         throw new ConflictException(
           "Complete a draft with a future deadline and declared skills before publishing",
@@ -78,10 +89,7 @@ export class WorkflowsService {
         .getOne();
       if (!posting) throw new NotFoundException();
       await this.access.company(p, posting.companyId, m);
-      if (!(
-        (posting.status === "OPEN" && body.targetStatus === "CLOSED") ||
-        (posting.status === "CLOSED" && body.targetStatus === "ARCHIVED")
-      ))
+      if (!canTransitionPosting(posting.status, body.targetStatus))
         throw new ConflictException("Invalid posting transition");
       posting.status = body.targetStatus;
       await m.save(posting);
@@ -122,12 +130,12 @@ export class WorkflowsService {
         .getOne();
       if (!row) throw new NotFoundException();
       await this.access.placement(p, id, m);
-      if (
-        row.status !== "ACTIVE" ||
-        !["COMPLETED", "TERMINATED"].includes(body.targetStatus)
-      )
+      const placement = PlacementAggregate.rehydrate(
+        row.status as PlacementStatus,
+      );
+      if (!placement.end(body.targetStatus))
         throw new ConflictException("Invalid placement transition");
-      row.status = body.targetStatus;
+      row.status = placement.status;
       row.endedAt = new Date();
       row.endedByUserId = p.id;
       await m.save(row);
@@ -153,7 +161,11 @@ export class WorkflowsService {
         .where("p.id=:id", { id })
         .getOneOrFail();
       await this.access.placement(p, id, m);
-      if (placement.status !== "ACTIVE")
+      if (
+        !PlacementAggregate.rehydrate(
+          placement.status as PlacementStatus,
+        ).canAcceptActivity()
+      )
         throw new ConflictException("Placement ended");
       if (
         body.dueDate &&
@@ -197,7 +209,11 @@ export class WorkflowsService {
         .where("p.id=:id", { id: placementId })
         .getOneOrFail();
       await this.access.placement(p, placementId, m);
-      if (placement.status !== "ACTIVE")
+      if (
+        !PlacementAggregate.rehydrate(
+          placement.status as PlacementStatus,
+        ).canAcceptActivity()
+      )
         throw new ConflictException("Placement ended");
       const task = await m.getRepository(Task).findOneBy({ id, placementId });
       if (!task) throw new NotFoundException();
