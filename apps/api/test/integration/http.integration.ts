@@ -209,8 +209,15 @@ it("publishes a posting and protects draft visibility and IDs", async () => {
       .status,
   ).toBe(403);
   expect(
-    (await request("staff", `/postings/${postingId}/publish`, "POST")).status,
-  ).toBe(201);
+    (
+      await Promise.all([
+        request("staff", `/postings/${postingId}/publish`, "POST"),
+        request("staff", `/postings/${postingId}/publish`, "POST"),
+      ])
+    )
+      .map((response) => response.status)
+      .sort(),
+  ).toEqual([201, 409]);
   const postings = await request("student", "/postings");
   expect(postings.data[0].match.score).toBe(100);
 });
@@ -427,9 +434,11 @@ it("assigns tasks, scopes status writes, and preserves immutable report versions
   expect(
     (await request("supervisor", `/reports/${reportId}`)).data.draft,
   ).toBeUndefined();
-  expect(
-    (await request("student", `/reports/${reportId}/submit`, "POST")).status,
-  ).toBe(201);
+  const resubmits = await Promise.all([
+    request("student", `/reports/${reportId}/submit`, "POST"),
+    request("student", `/reports/${reportId}/submit`, "POST"),
+  ]);
+  expect(resubmits.map((result) => result.status).sort()).toEqual([201, 409]);
   expect(
     (
       await request("supervisor", `/reports/${reportId}/reviews`, "POST", {
@@ -438,6 +447,28 @@ it("assigns tasks, scopes status writes, and preserves immutable report versions
       })
     ).status,
   ).toBe(409);
+  const resubmitted = await request("student", `/reports/${reportId}`);
+  const currentVersionId = resubmitted.data.versions.at(-1).id;
+  expect(resubmitted.data.versions).toHaveLength(2);
+  const reviews = await Promise.all([
+    request("supervisor", `/reports/${reportId}/reviews`, "POST", {
+      reportVersionId: currentVersionId,
+      outcome: "APPROVED",
+    }),
+    request("supervisor", `/reports/${reportId}/reviews`, "POST", {
+      reportVersionId: currentVersionId,
+      outcome: "APPROVED",
+    }),
+  ]);
+  expect(reviews.map((result) => result.status).sort()).toEqual([201, 409]);
+  expect(
+    (
+      await db.query(
+        "SELECT id FROM report_reviews WHERE report_version_id=$1",
+        [currentVersionId],
+      )
+    ).length,
+  ).toBe(1);
   await expect(
     db.query("UPDATE report_versions SET accomplishments=$1 WHERE id=$2", [
       "tamper",
