@@ -22,7 +22,11 @@ import {
 import { AccessService } from "./access.service";
 import { Principal } from "./auth";
 import { deadlineInstant, reportingPeriods } from "./calendar";
-import { ApplicationStatus, canTransitionApplication } from "./core-domain";
+import {
+  AcceptanceCommand,
+  Application as ApplicationAggregate,
+  ApplicationStatus,
+} from "./core-domain";
 import { ApplicationDto, PageDto, TransitionDto } from "./dto";
 
 @Injectable()
@@ -147,19 +151,13 @@ export class ApplicationsService {
   async accept(p: Principal, id: string, b: TransitionDto) {
     if (b.targetStatus !== "ACCEPTED")
       return this.transition(p, id, b.targetStatus, b.note);
-    if (
-      !b.supervisorUserId ||
-      !b.startDate ||
-      !b.endDate ||
-      b.endDate < b.startDate
-    )
-      throw new BadRequestException("Invalid acceptance");
-    const command = {
+    const command = AcceptanceCommand.create({
       supervisorUserId: b.supervisorUserId,
       startDate: b.startDate,
       endDate: b.endDate,
-      note: b.note?.trim() || null,
-    };
+      note: b.note,
+    });
+    if (!command) throw new BadRequestException("Invalid acceptance");
     return this.db.transaction(async (m) => {
       const app = await m
         .getRepository(Application)
@@ -178,31 +176,31 @@ export class ApplicationsService {
       const accepted = await m
         .getRepository(ApplicationHistory)
         .findOneBy({ applicationId: id, toStatus: "ACCEPTED" });
-      if (app.status === "ACCEPTED") {
-        if (
-          existing &&
-          accepted?.acceptanceCommand &&
-          Object.entries(command).every(
-            ([key, value]) =>
-              (accepted.acceptanceCommand as Record<string, unknown>)[key] ===
-              value,
-          )
-        )
-          return { application: app, placement: existing };
+      const aggregate = ApplicationAggregate.rehydrate(
+        app.status as ApplicationStatus,
+      );
+      const acceptance = aggregate.accept(
+        command,
+        AcceptanceCommand.fromStored(accepted?.acceptanceCommand),
+      );
+      if (acceptance === "REPLAY") {
+        if (existing) return { application: app, placement: existing };
         throw new ConflictException("ACCEPTANCE_CONFLICT");
       }
-      if (app.status !== "INTERVIEW")
+      if (acceptance === "ACCEPTANCE_CONFLICT")
+        throw new ConflictException("ACCEPTANCE_CONFLICT");
+      if (acceptance !== "ACCEPTED")
         throw new ConflictException("Invalid application transition");
       if (
         !(await m.getRepository(UserRole).exist({
-          where: { userId: b.supervisorUserId, role: "SUPERVISOR" },
+          where: { userId: command.supervisorUserId, role: "SUPERVISOR" },
         })) ||
         !(await m
           .getRepository(SupervisorProfile)
-          .exist({ where: { userId: b.supervisorUserId } }))
+          .exist({ where: { userId: command.supervisorUserId } }))
       )
         throw new BadRequestException("Supervisor is not eligible");
-      app.status = "ACCEPTED";
+      app.status = aggregate.status;
       await m.save(app);
       await m.getRepository(ApplicationHistory).save({
         applicationId: id,
@@ -210,7 +208,7 @@ export class ApplicationsService {
         toStatus: "ACCEPTED",
         actorUserId: p.id,
         note: command.note ?? undefined,
-        acceptanceCommand: command,
+        acceptanceCommand: command.toData(),
       });
       const placement = await m.getRepository(Placement).save({
         applicationId: id,
@@ -218,14 +216,14 @@ export class ApplicationsService {
         postingId: posting.id,
         companyId: posting.companyId,
         termId: posting.termId,
-        startDate: b.startDate,
-        endDate: b.endDate,
+        startDate: command.startDate,
+        endDate: command.endDate,
         status: "ACTIVE",
         reportingTimezone: posting.deadlineTimezone,
       });
       await m.getRepository(SupervisorAssignment).save({
         placementId: placement.id,
-        supervisorUserId: b.supervisorUserId,
+        supervisorUserId: command.supervisorUserId,
         assignedByUserId: p.id,
         reason: command.note ?? undefined,
       });
@@ -233,8 +231,8 @@ export class ApplicationsService {
         .getRepository(ReportingPeriod)
         .save(
           reportingPeriods(
-            b.startDate!,
-            b.endDate!,
+            command.startDate,
+            command.endDate,
             placement.reportingTimezone,
           ).map((x) => ({ placementId: placement.id, ...x })),
         );
@@ -263,16 +261,18 @@ export class ApplicationsService {
         .getOne();
       if (!app) throw new NotFoundException();
       await this.access.application(p, id, m);
+      const aggregate = ApplicationAggregate.rehydrate(
+        app.status as ApplicationStatus,
+      );
       if (
-        !canTransitionApplication(
-          app.status as ApplicationStatus,
+        !aggregate.transitionTo(
           target as ApplicationStatus,
           p.role === "STUDENT" ? "student" : "staff",
         )
       )
         throw new ConflictException("Invalid application transition");
       const previous = app.status;
-      app.status = target;
+      app.status = aggregate.status;
       await m.save(app);
       await m.getRepository(ApplicationHistory).save({
         applicationId: id,
