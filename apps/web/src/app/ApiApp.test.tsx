@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ApiApp, { numberValue, split, sum, tone, validateFile } from "./ApiApp";
 import { SessionProvider } from "./session";
+import { formatDate } from "../features/view";
 
 const user = {
   id: "u1",
@@ -12,13 +13,17 @@ const user = {
   fullName: "Student",
   roles: ["STUDENT"],
 };
-function setup(path: string, role = "STUDENT") {
+function setup(
+  path: string,
+  role = "STUDENT",
+  roles = role === "ADMIN" ? ["ADMIN"] : ["STUDENT"],
+) {
   sessionStorage.setItem(
     "internhub.session",
     JSON.stringify({
       accessToken: "token",
       activeRole: role,
-      user: { ...user, roles: role === "ADMIN" ? ["ADMIN"] : ["STUDENT"] },
+      user: { ...user, roles },
     }),
   );
   const client = new QueryClient({
@@ -41,12 +46,15 @@ describe("ApiApp utilities and routes", () => {
   });
   it("normalizes view helper inputs and rejects unsafe files", () => {
     expect(tone("REJECTED")).toBe("red");
+    expect(tone("FAILED")).toBe("red");
     expect(tone("OPEN")).toBe("green");
+    expect(tone("AVAILABLE")).toBe("green");
     expect(tone("DRAFT")).toBe("amber");
     expect(split(" React, , TypeScript ")).toEqual(["React", "TypeScript"]);
     expect(numberValue("4")).toBe(4);
     expect(numberValue("0")).toBeUndefined();
     expect(numberValue(null)).toBeUndefined();
+    expect(formatDate()).toBe("—");
     expect(sum({ one: 2, text: "x", two: 3 })).toBe(5);
     expect(sum(null)).toBe(0);
     expect(() =>
@@ -61,6 +69,7 @@ describe("ApiApp utilities and routes", () => {
         }),
       ),
     ).toThrow("10 MiB");
+    expect(() => validateFile(new File(["x"], "unknown"))).not.toThrow();
   });
   it("redirects anonymous users to login and submits the login form", async () => {
     sessionStorage.clear();
@@ -195,6 +204,159 @@ describe("ApiApp utilities and routes", () => {
     await screen.findByRole("heading", { name: "Second Admin" });
     expect(screen.getByLabelText("ADMIN")).toBeChecked();
     expect(screen.getByLabelText("STUDENT")).not.toBeChecked();
+  });
+  it("updates an administrator account, roles, and memberships", async () => {
+    const admin: AdminUser = {
+      id: "admin-1",
+      email: "admin@example.test",
+      fullName: "Admin User",
+      isActive: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      roles: ["STUDENT"],
+      memberships: [{ companyId: "company-1", title: "Owner", active: true }],
+    };
+    vi.spyOn(endpoints, "me").mockResolvedValue({
+      id: "u1",
+      roles: ["ADMIN"],
+      activeRole: "ADMIN",
+    });
+    vi.spyOn(endpoints, "adminUsers").mockResolvedValue({
+      items: [admin],
+      total: 1,
+    });
+    vi.spyOn(endpoints, "adminUser").mockResolvedValue(admin);
+    vi.spyOn(endpoints, "companyCatalog").mockResolvedValue([
+      { id: "company-1", name: "Existing Co" },
+      { id: "company-2", name: "New Co" },
+    ]);
+    const account = vi
+      .spyOn(endpoints, "updateAdminAccount")
+      .mockResolvedValue(admin);
+    const roles = vi
+      .spyOn(endpoints, "updateAdminRoles")
+      .mockResolvedValue(admin);
+    const memberships = vi
+      .spyOn(endpoints, "updateAdminMemberships")
+      .mockResolvedValue(admin);
+    setup("/administration/users", "ADMIN");
+    fireEvent.click(await screen.findByRole("button", { name: /Admin User/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Disable account" }),
+    );
+    await waitFor(() =>
+      expect(account).toHaveBeenCalledWith("admin-1", {
+        expectedUpdatedAt: admin.updatedAt,
+        isActive: false,
+      }),
+    );
+    fireEvent.click(screen.getByLabelText("STUDENT"));
+    fireEvent.click(screen.getByRole("button", { name: "Save roles" }));
+    await waitFor(() =>
+      expect(roles).toHaveBeenCalledWith(
+        "admin-1",
+        expect.objectContaining({ roles: [] }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
+    await waitFor(() =>
+      expect(memberships).toHaveBeenCalledWith(
+        "admin-1",
+        expect.objectContaining({
+          memberships: [
+            { companyId: "company-1", title: "Owner", active: false },
+          ],
+        }),
+      ),
+    );
+    fireEvent.change(screen.getAllByRole("combobox")[1], {
+      target: { value: "company-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add membership" }));
+    await waitFor(() =>
+      expect(memberships).toHaveBeenLastCalledWith(
+        "admin-1",
+        expect.objectContaining({
+          memberships: expect.arrayContaining([
+            { companyId: "company-2", active: true },
+          ]),
+        }),
+      ),
+    );
+  });
+  it("shows administration query and mutation errors", async () => {
+    vi.spyOn(endpoints, "me").mockResolvedValue({
+      id: "u1",
+      roles: ["ADMIN"],
+      activeRole: "ADMIN",
+    });
+    vi.spyOn(endpoints, "adminUsers").mockRejectedValue(
+      new Error("Directory unavailable"),
+    );
+    setup("/administration/users", "ADMIN");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Directory unavailable",
+    );
+  });
+  it("handles password recovery and reset validation", async () => {
+    const request = vi
+      .spyOn(endpoints, "requestPasswordReset")
+      .mockRejectedValueOnce(new Error("Mail unavailable"))
+      .mockResolvedValue({ ok: true });
+    setup("/forgot-password");
+    fireEvent.change(screen.getByRole("textbox", { name: /email/i }), {
+      target: { value: user.email },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Mail unavailable",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "reset link has been sent",
+    );
+    expect(request).toHaveBeenCalledWith(user.email);
+
+    sessionStorage.clear();
+    setup("/reset-password");
+    fireEvent.change(screen.getByLabelText(/^new password/i), {
+      target: { value: "a-long-password" },
+    });
+    fireEvent.change(screen.getByLabelText(/^confirm new password/i), {
+      target: { value: "different-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reset password" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Reset link is invalid or incomplete",
+    );
+  });
+  it("keeps the current role on a failed switch and updates it after success", async () => {
+    vi.spyOn(endpoints, "me")
+      .mockResolvedValueOnce({
+        id: "u1",
+        roles: ["STUDENT", "ADMIN"],
+        activeRole: "STUDENT",
+      })
+      .mockResolvedValueOnce({
+        id: "u1",
+        roles: ["STUDENT", "ADMIN"],
+        activeRole: "ADMIN",
+      });
+    vi.spyOn(endpoints, "setActiveRole")
+      .mockRejectedValueOnce(new Error("Role unavailable"))
+      .mockResolvedValue({ accessToken: "admin-token", activeRole: "ADMIN" });
+    setup("/discover", "STUDENT", ["STUDENT", "ADMIN"]);
+    const switcher = await screen.findByRole("combobox", {
+      name: "Active role",
+    });
+    fireEvent.change(switcher, { target: { value: "ADMIN" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Role unavailable",
+    );
+    expect(switcher).toHaveValue("STUDENT");
+    fireEvent.change(switcher, { target: { value: "ADMIN" } });
+    await waitFor(() => expect(switcher).toHaveValue("ADMIN"));
+    expect(endpoints.setActiveRole).toHaveBeenLastCalledWith("ADMIN");
   });
   it("shows an API error instead of retrying an unavailable route", async () => {
     vi.spyOn(endpoints, "me").mockResolvedValue({

@@ -325,6 +325,33 @@ it("saves a self-assessment and renders evaluation read-only for the student", a
   expect(await screen.findByLabelText(/Completion decision/)).toBeDisabled();
   expect(screen.queryByText("Submit")).not.toBeInTheDocument();
 });
+it("shows assessment load and save failures", async () => {
+  vi.spyOn(endpoints, "selfAssessment").mockRejectedValue(
+    new ApiError(401, "Assessment unavailable"),
+  );
+  mount(<AssessmentPage kind="self" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Assessment unavailable",
+  );
+  cleanup();
+  vi.mocked(endpoints.selfAssessment).mockRejectedValue(
+    new ApiError(404, "Absent"),
+  );
+  vi.spyOn(endpoints, "putSelfAssessment").mockRejectedValue(
+    new ApiError(409, "Assessment changed"),
+  );
+  mount(<AssessmentPage kind="self" />);
+  fireEvent.change(await screen.findByLabelText(/Reflection/), {
+    target: { value: "Learned" },
+  });
+  fireEvent.change(screen.getByLabelText(/Learning outcomes/), {
+    target: { value: "Tests" },
+  });
+  fireEvent.click(screen.getByText("Save draft"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Assessment changed",
+  );
+});
 it("creates drafts with a company selection and reports API validation errors", async () => {
   session.activeRole = "COMPANY_STAFF";
   vi.spyOn(endpoints, "companies").mockResolvedValue([
