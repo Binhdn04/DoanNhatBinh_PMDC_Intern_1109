@@ -9,7 +9,6 @@ describe("application lifecycle", () => {
     ["SUBMITTED", "UNDER_REVIEW"],
     ["SUBMITTED", "REJECTED"],
     ["UNDER_REVIEW", "INTERVIEW"],
-    ["INTERVIEW", "ACCEPTED"],
     ["INTERVIEW", "REJECTED"],
   ] as const)("allows staff transition %s -> %s", (from, to) => {
     expect(canTransitionApplication(from, to, "staff")).toBe(true);
@@ -22,7 +21,7 @@ describe("application lifecycle", () => {
     },
   );
 
-  it("rejects terminal, backwards, and staff withdrawal transitions", () => {
+  it("rejects terminal, backwards, withdrawal, and commandless acceptance transitions", () => {
     expect(canTransitionApplication("ACCEPTED", "REJECTED", "staff")).toBe(
       false,
     );
@@ -35,6 +34,9 @@ describe("application lifecycle", () => {
     expect(canTransitionApplication("SUBMITTED", "ACCEPTED", "student")).toBe(
       false,
     );
+    const interview = Application.rehydrate("INTERVIEW");
+    expect(interview.transitionTo("ACCEPTED", "staff")).toBe(false);
+    expect(interview.status).toBe("INTERVIEW");
   });
 
   it("accepts once from interview and recognizes only a canonical replay", () => {

@@ -124,6 +124,9 @@ export class Application {
   }
 
   transitionTo(target: ApplicationStatus, actor: ApplicationActor): boolean {
+    // Acceptance needs an AcceptanceCommand and must use accept() so the
+    // aggregate can also decide canonical replay behavior.
+    if (target === "ACCEPTED") return false;
     if (!canTransitionApplication(this.currentStatus, target, actor))
       return false;
     this.currentStatus = target;
@@ -157,4 +160,4 @@ export const canTransitionApplication = (
 ) =>
   actor === "student"
     ? to === "WITHDRAWN" && transitions[from].includes(to)
-    : transitions[from].includes(to) && to !== "WITHDRAWN";
+    : transitions[from].includes(to) && to !== "WITHDRAWN" && to !== "ACCEPTED";
