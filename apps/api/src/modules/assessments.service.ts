@@ -7,6 +7,10 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, Repository } from "typeorm";
 import {
+  canSavePerformanceEvaluation,
+  canSaveSelfAssessment,
+} from "./core-domain";
+import {
   PerformanceEvaluation,
   Placement,
   SelfAssessment,
@@ -15,14 +19,6 @@ import { AccessService } from "./access.service";
 import { Principal, assert } from "./auth";
 import { AssessmentDto } from "./dto";
 const trim = (value?: string) => value?.trim() || undefined;
-const validRatings = (ratings: unknown, required: boolean) =>
-  typeof ratings === "object" &&
-  ratings !== null &&
-  !Array.isArray(ratings) &&
-  (!required || Object.keys(ratings as object).length > 0) &&
-  Object.values(ratings as object).every(
-    (x) => Number.isInteger(x) && Number(x) >= 1 && Number(x) <= 5,
-  );
 @Injectable()
 export class AssessmentsService {
   constructor(
@@ -52,12 +48,7 @@ export class AssessmentsService {
       const placement = await this.lockActive(p, id, manager);
       assert(placement.studentId === p.id);
       const selfAssessments = manager.getRepository(SelfAssessment);
-      if (
-        !["DRAFT", "SUBMITTED"].includes(body.status) ||
-        !validRatings(body.ratings ?? {}, body.status === "SUBMITTED") ||
-        (body.status === "SUBMITTED" &&
-          (!trim(body.reflection) || !trim(body.learningOutcomes)))
-      )
+      if (!canSaveSelfAssessment({ ...body, ratings: body.ratings ?? {} }))
         throw new BadRequestException("Invalid assessment");
       let row = await selfAssessments.findOneBy({ placementId: id });
       row = Object.assign(row ?? selfAssessments.create({ placementId: id }), {
@@ -89,11 +80,7 @@ export class AssessmentsService {
       await this.lockActive(p, id, manager);
       const evaluations = manager.getRepository(PerformanceEvaluation);
       if (
-        !["DRAFT", "SUBMITTED"].includes(body.status) ||
-        !["PASSED", "FAILED", "PENDING", "INCOMPLETE"].includes(
-          body.completionDecision ?? "",
-        ) ||
-        !validRatings(body.ratings ?? {}, body.status === "SUBMITTED")
+        !canSavePerformanceEvaluation({ ...body, ratings: body.ratings ?? {} })
       )
         throw new BadRequestException("Invalid evaluation");
       let row = await evaluations.findOneBy({ placementId: id });
