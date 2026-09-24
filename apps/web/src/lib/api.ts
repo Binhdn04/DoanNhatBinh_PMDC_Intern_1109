@@ -166,6 +166,21 @@ export const endpoints = {
       body: JSON.stringify({ email, password, activeRole }),
     }),
   signOut: () => api<{ ok: boolean }>("/auth/sign-out", { method: "POST" }),
+  register: (fullName: string, email: string, password: string) =>
+    api<{ ok: boolean }>("/auth/registrations", {
+      method: "POST",
+      body: JSON.stringify({ fullName, email, password }),
+    }),
+  requestEmailVerification: (email: string) =>
+    api<{ ok: boolean }>("/auth/email-verification-requests", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  verifyEmail: (token: string) =>
+    api<{ ok: boolean }>("/auth/email-verifications", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
   requestPasswordReset: (email: string) =>
     api<{ ok: boolean }>("/auth/password-reset-requests", {
       method: "POST",

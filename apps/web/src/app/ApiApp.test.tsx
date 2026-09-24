@@ -101,6 +101,43 @@ describe("ApiApp utilities and routes", () => {
       expect(signIn).toHaveBeenCalledWith(user.email, "pw", undefined),
     );
   });
+  it("registers a student, resends verification, and verifies an emailed token", async () => {
+    const register = vi.spyOn(endpoints, "register").mockResolvedValue({ ok: true });
+    const resend = vi
+      .spyOn(endpoints, "requestEmailVerification")
+      .mockResolvedValue({ ok: true });
+    const verify = vi.spyOn(endpoints, "verifyEmail").mockResolvedValue({ ok: true });
+    const registration = setup("/register");
+    fireEvent.change(screen.getByLabelText(/full name/i), {
+      target: { value: "New Student" },
+    });
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "new@example.test" },
+    });
+    fireEvent.change(screen.getByLabelText(/^password/i), {
+      target: { value: "a-long-password" },
+    });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), {
+      target: { value: "a-long-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith(
+        "New Student",
+        "new@example.test",
+        "a-long-password",
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
+    fireEvent.click(screen.getByRole("button", { name: "Resend verification email" }));
+    await waitFor(() => expect(resend).toHaveBeenCalledWith("new@example.test"));
+
+    registration.unmount();
+    setup("/verify-email?token=verification-token");
+    fireEvent.click(await screen.findByRole("button", { name: "Verify email" }));
+    await waitFor(() => expect(verify).toHaveBeenCalledWith("verification-token"));
+    expect(await screen.findByRole("status")).toHaveTextContent("Email verified");
+  });
   it("renders discover data, filters it, and renders empty state", async () => {
     vi.spyOn(endpoints, "me").mockResolvedValue({
       id: "u1",

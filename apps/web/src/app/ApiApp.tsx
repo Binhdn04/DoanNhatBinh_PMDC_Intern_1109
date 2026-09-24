@@ -129,8 +129,148 @@ function Login() {
           <Button type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </Button>
+          <Link to="/register">Create a student account</Link>
           <Link to="/forgot-password">Forgot password?</Link>
         </form>
+      </Card>
+    </main>
+  );
+}
+
+function Register() {
+  const [email, setEmail] = useState("");
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [resending, setResending] = useState(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const password = String(data.get("password"));
+    if (password !== String(data.get("confirmPassword"))) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError("");
+    try {
+      await endpoints.register(
+        String(data.get("fullName")),
+        String(data.get("email")),
+        password,
+      );
+      setEmail(String(data.get("email")));
+      setDone(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to register");
+    }
+  };
+  const resend = async () => {
+    setResending(true);
+    setError("");
+    try {
+      await endpoints.requestEmailVerification(email);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to resend verification",
+      );
+    } finally {
+      setResending(false);
+    }
+  };
+  return (
+    <main className="content" style={{ maxWidth: 520 }}>
+      <PageHeader
+        title="Create your student account"
+        description="Verify your email before signing in."
+      />
+      <Card>
+        {done ? (
+          <>
+            <p role="status">
+              Check your email for a verification link. If an account can be verified,
+              we will send instructions.
+            </p>
+            <Button type="button" onClick={() => void resend()} disabled={resending}>
+              {resending ? "Sending…" : "Resend verification email"}
+            </Button>
+            <Link to="/login">Return to sign in</Link>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <Field label="Full name" required>
+              <TextInput name="fullName" required autoComplete="name" maxLength={200} />
+            </Field>
+            <Field label="Email" required>
+              <TextInput name="email" type="email" required autoComplete="email" maxLength={320} />
+            </Field>
+            <Field label="Password" required>
+              <TextInput
+                name="password"
+                type="password"
+                required
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="Confirm password" required>
+              <TextInput
+                name="confirmPassword"
+                type="password"
+                required
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+              />
+            </Field>
+            {error && <p className="notice" role="alert">{error}</p>}
+            <Button type="submit">Create account</Button>
+            <Link to="/login">Already have an account? Sign in</Link>
+          </form>
+        )}
+        {done && error && <p className="notice" role="alert">{error}</p>}
+      </Card>
+    </main>
+  );
+}
+
+function VerifyEmail() {
+  const location = useLocation();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const verify = async () => {
+    const token = new URLSearchParams(location.search).get("token");
+    if (!token) return setError("Verification link is invalid or incomplete.");
+    setBusy(true);
+    setError("");
+    try {
+      await endpoints.verifyEmail(token);
+      setDone(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Unable to verify email",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="content" style={{ maxWidth: 520 }}>
+      <PageHeader title="Verify your email" description="Confirm your student account." />
+      <Card>
+        {done ? (
+          <>
+            <p role="status">Email verified. You can now sign in.</p>
+            <Link to="/login">Sign in</Link>
+          </>
+        ) : (
+          <>
+            <Button type="button" onClick={() => void verify()} disabled={busy}>
+              {busy ? "Verifying…" : "Verify email"}
+            </Button>
+            {error && <p role="alert">{error}</p>}
+          </>
+        )}
       </Card>
     </main>
   );
@@ -360,6 +500,8 @@ export default function ApiApp() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireRole />}>
