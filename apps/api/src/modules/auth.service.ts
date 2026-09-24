@@ -165,10 +165,12 @@ export class AuthService {
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
     await this.verificationTokens.manager.transaction(async (manager) => {
-      await manager.getRepository(EmailVerificationToken).update(
-        { userId, usedAt: IsNull(), revokedAt: IsNull() },
-        { revokedAt: now },
-      );
+      await manager
+        .getRepository(EmailVerificationToken)
+        .update(
+          { userId, usedAt: IsNull(), revokedAt: IsNull() },
+          { revokedAt: now },
+        );
       await manager.getRepository(EmailVerificationToken).save({
         userId,
         tokenHash: this.tokenHash(token),
@@ -179,7 +181,11 @@ export class AuthService {
   }
   private async revokeVerificationToken(token: string) {
     await this.verificationTokens.update(
-      { tokenHash: this.tokenHash(token), usedAt: IsNull(), revokedAt: IsNull() },
+      {
+        tokenHash: this.tokenHash(token),
+        usedAt: IsNull(),
+        revokedAt: IsNull(),
+      },
       { revokedAt: new Date() },
     );
   }
@@ -204,7 +210,9 @@ export class AuthService {
         await manager
           .getRepository(UserRole)
           .save({ userId: created.id, role: "STUDENT" });
-        await manager.getRepository(StudentProfile).save({ userId: created.id });
+        await manager
+          .getRepository(StudentProfile)
+          .save({ userId: created.id });
         await manager.getRepository(AuditEvent).save({
           subjectType: "USER",
           subjectId: created.id,
@@ -263,26 +271,34 @@ export class AuthService {
   async verifyEmail(body: EmailVerificationDto) {
     const hash = this.tokenHash(body.token);
     await this.verificationTokens.manager.transaction(async (manager) => {
-      const token = await manager.getRepository(EmailVerificationToken).findOne({
-        where: { tokenHash: hash, usedAt: IsNull(), revokedAt: IsNull() },
-        lock: { mode: "pessimistic_write" },
-      });
+      const token = await manager
+        .getRepository(EmailVerificationToken)
+        .findOne({
+          where: { tokenHash: hash, usedAt: IsNull(), revokedAt: IsNull() },
+          lock: { mode: "pessimistic_write" },
+        });
       if (!token || token.expiresAt <= new Date())
-        throw new UnauthorizedException("Verification link is invalid or expired");
+        throw new UnauthorizedException(
+          "Verification link is invalid or expired",
+        );
       const user = await manager.getRepository(User).findOne({
         where: { id: token.userId },
         lock: { mode: "pessimistic_write" },
       });
       if (!user || !user.isActive)
-        throw new UnauthorizedException("Verification link is invalid or expired");
+        throw new UnauthorizedException(
+          "Verification link is invalid or expired",
+        );
       const now = new Date();
       await manager
         .getRepository(EmailVerificationToken)
         .update(token.id, { usedAt: now });
-      await manager.getRepository(EmailVerificationToken).update(
-        { userId: user.id, usedAt: IsNull(), revokedAt: IsNull() },
-        { revokedAt: now },
-      );
+      await manager
+        .getRepository(EmailVerificationToken)
+        .update(
+          { userId: user.id, usedAt: IsNull(), revokedAt: IsNull() },
+          { revokedAt: now },
+        );
       if (!user.emailVerifiedAt) {
         await manager.getRepository(User).update(user.id, {
           emailVerifiedAt: now,

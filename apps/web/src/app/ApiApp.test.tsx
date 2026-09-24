@@ -102,11 +102,15 @@ describe("ApiApp utilities and routes", () => {
     );
   });
   it("registers a student, resends verification, and verifies an emailed token", async () => {
-    const register = vi.spyOn(endpoints, "register").mockResolvedValue({ ok: true });
+    const register = vi
+      .spyOn(endpoints, "register")
+      .mockResolvedValue({ ok: true });
     const resend = vi
       .spyOn(endpoints, "requestEmailVerification")
       .mockResolvedValue({ ok: true });
-    const verify = vi.spyOn(endpoints, "verifyEmail").mockResolvedValue({ ok: true });
+    const verify = vi
+      .spyOn(endpoints, "verifyEmail")
+      .mockResolvedValue({ ok: true });
     const registration = setup("/register");
     fireEvent.change(screen.getByLabelText(/full name/i), {
       target: { value: "New Student" },
@@ -128,15 +132,27 @@ describe("ApiApp utilities and routes", () => {
         "a-long-password",
       ),
     );
-    expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
-    fireEvent.click(screen.getByRole("button", { name: "Resend verification email" }));
-    await waitFor(() => expect(resend).toHaveBeenCalledWith("new@example.test"));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Check your email",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resend verification email" }),
+    );
+    await waitFor(() =>
+      expect(resend).toHaveBeenCalledWith("new@example.test"),
+    );
 
     registration.unmount();
     setup("/verify-email?token=verification-token");
-    fireEvent.click(await screen.findByRole("button", { name: "Verify email" }));
-    await waitFor(() => expect(verify).toHaveBeenCalledWith("verification-token"));
-    expect(await screen.findByRole("status")).toHaveTextContent("Email verified");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Verify email" }),
+    );
+    await waitFor(() =>
+      expect(verify).toHaveBeenCalledWith("verification-token"),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Email verified",
+    );
   });
   it("renders discover data, filters it, and renders empty state", async () => {
     vi.spyOn(endpoints, "me").mockResolvedValue({

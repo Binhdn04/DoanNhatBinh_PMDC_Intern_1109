@@ -30,7 +30,9 @@ export class PasswordRecoveryMailer {
 
   async sendEmailVerification(email: string, token: string): Promise<void> {
     if (!this.transport || !process.env.MAIL_FROM || !process.env.APP_BASE_URL)
-      throw new ServiceUnavailableException("Email verification is unavailable");
+      throw new ServiceUnavailableException(
+        "Email verification is unavailable",
+      );
     const url = new URL("/verify-email", process.env.APP_BASE_URL);
     url.searchParams.set("token", token);
     await this.transport.sendMail({

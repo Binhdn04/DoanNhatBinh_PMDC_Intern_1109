@@ -203,23 +203,78 @@ it("registers, verifies, and signs in a student without exposing duplicate accou
     email: " NEW.STUDENT@example.test ",
     password: "A secure student password",
   };
-  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(201);
-  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(201);
+  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(
+    201,
+  );
+  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(
+    201,
+  );
   const user = await db.getRepository(User).findOneByOrFail({ email });
   expect(user.emailVerifiedAt).toBeNull();
-  expect(await db.getRepository(UserRole).exist({ where: { userId: user.id, role: "STUDENT" } })).toBe(true);
-  expect(await db.getRepository(StudentProfile).exist({ where: { userId: user.id } })).toBe(true);
-  expect(await db.getRepository(AuditEvent).exist({ where: { subjectId: user.id, eventType: "USER_REGISTERED" } })).toBe(true);
-  expect((await request("", "/auth/sign-in", "POST", { email, password: body.password })).status).toBe(403);
+  expect(
+    await db
+      .getRepository(UserRole)
+      .exist({ where: { userId: user.id, role: "STUDENT" } }),
+  ).toBe(true);
+  expect(
+    await db
+      .getRepository(StudentProfile)
+      .exist({ where: { userId: user.id } }),
+  ).toBe(true);
+  expect(
+    await db
+      .getRepository(AuditEvent)
+      .exist({ where: { subjectId: user.id, eventType: "USER_REGISTERED" } }),
+  ).toBe(true);
+  expect(
+    (
+      await request("", "/auth/sign-in", "POST", {
+        email,
+        password: body.password,
+      })
+    ).status,
+  ).toBe(403);
   const first = verificationEmails.at(-1)!;
-  expect((await request("", "/auth/email-verification-requests", "POST", { email })).status).toBe(201);
+  expect(
+    (await request("", "/auth/email-verification-requests", "POST", { email }))
+      .status,
+  ).toBe(201);
   const second = verificationEmails.at(-1)!;
   expect(second.token).not.toBe(first.token);
-  expect((await request("", "/auth/email-verifications", "POST", { token: first.token })).status).toBe(401);
-  expect((await request("", "/auth/email-verifications", "POST", { token: second.token })).status).toBe(201);
-  expect((await request("", "/auth/email-verifications", "POST", { token: second.token })).status).toBe(401);
-  expect((await request("", "/auth/sign-in", "POST", { email, password: body.password })).status).toBe(201);
-  expect(await db.getRepository(AuditEvent).exist({ where: { subjectId: user.id, eventType: "EMAIL_VERIFIED" } })).toBe(true);
+  expect(
+    (
+      await request("", "/auth/email-verifications", "POST", {
+        token: first.token,
+      })
+    ).status,
+  ).toBe(401);
+  expect(
+    (
+      await request("", "/auth/email-verifications", "POST", {
+        token: second.token,
+      })
+    ).status,
+  ).toBe(201);
+  expect(
+    (
+      await request("", "/auth/email-verifications", "POST", {
+        token: second.token,
+      })
+    ).status,
+  ).toBe(401);
+  expect(
+    (
+      await request("", "/auth/sign-in", "POST", {
+        email,
+        password: body.password,
+      })
+    ).status,
+  ).toBe(201);
+  expect(
+    await db
+      .getRepository(AuditEvent)
+      .exist({ where: { subjectId: user.id, eventType: "EMAIL_VERIFIED" } }),
+  ).toBe(true);
 });
 it("publishes a posting and protects draft visibility and IDs", async () => {
   const body = {

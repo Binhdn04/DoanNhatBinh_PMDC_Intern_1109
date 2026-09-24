@@ -170,7 +170,9 @@ function Register() {
       await endpoints.requestEmailVerification(email);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Unable to resend verification",
+        reason instanceof Error
+          ? reason.message
+          : "Unable to resend verification",
       );
     } finally {
       setResending(false);
@@ -186,10 +188,14 @@ function Register() {
         {done ? (
           <>
             <p role="status">
-              Check your email for a verification link. If an account can be verified,
-              we will send instructions.
+              Check your email for a verification link. If an account can be
+              verified, we will send instructions.
             </p>
-            <Button type="button" onClick={() => void resend()} disabled={resending}>
+            <Button
+              type="button"
+              onClick={() => void resend()}
+              disabled={resending}
+            >
               {resending ? "Sending…" : "Resend verification email"}
             </Button>
             <Link to="/login">Return to sign in</Link>
@@ -197,10 +203,21 @@ function Register() {
         ) : (
           <form onSubmit={submit}>
             <Field label="Full name" required>
-              <TextInput name="fullName" required autoComplete="name" maxLength={200} />
+              <TextInput
+                name="fullName"
+                required
+                autoComplete="name"
+                maxLength={200}
+              />
             </Field>
             <Field label="Email" required>
-              <TextInput name="email" type="email" required autoComplete="email" maxLength={320} />
+              <TextInput
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                maxLength={320}
+              />
             </Field>
             <Field label="Password" required>
               <TextInput
@@ -222,12 +239,20 @@ function Register() {
                 autoComplete="new-password"
               />
             </Field>
-            {error && <p className="notice" role="alert">{error}</p>}
+            {error && (
+              <p className="notice" role="alert">
+                {error}
+              </p>
+            )}
             <Button type="submit">Create account</Button>
             <Link to="/login">Already have an account? Sign in</Link>
           </form>
         )}
-        {done && error && <p className="notice" role="alert">{error}</p>}
+        {done && error && (
+          <p className="notice" role="alert">
+            {error}
+          </p>
+        )}
       </Card>
     </main>
   );
@@ -256,7 +281,10 @@ function VerifyEmail() {
   };
   return (
     <main className="content" style={{ maxWidth: 520 }}>
-      <PageHeader title="Verify your email" description="Confirm your student account." />
+      <PageHeader
+        title="Verify your email"
+        description="Confirm your student account."
+      />
       <Card>
         {done ? (
           <>
