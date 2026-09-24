@@ -29,6 +29,17 @@ export class SignInDto {
   @IsString() @Length(1, 128) password!: string;
   @IsOptional() @IsIn(roles) activeRole?: Role;
 }
+export class RegistrationDto {
+  @text() @IsString() @Length(1, 200) fullName!: string;
+  @text() @IsEmail() @MaxLength(320) email!: string;
+  @IsString() @Length(12, 128) password!: string;
+}
+export class EmailVerificationRequestDto {
+  @text() @IsEmail() @MaxLength(320) email!: string;
+}
+export class EmailVerificationDto {
+  @IsString() @Length(32, 512) token!: string;
+}
 export class PasswordResetRequestDto {
   @IsEmail() @MaxLength(320) email!: string;
 }

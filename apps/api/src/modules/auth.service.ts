@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   Injectable,
   UnauthorizedException,
@@ -12,12 +13,21 @@ import { IsNull, Repository } from "typeorm";
 import {
   AuthSession,
   AuditEvent,
+  EmailVerificationToken,
   PasswordResetToken,
+  StudentProfile,
   User,
   UserRole,
 } from "../infrastructure/database/entities";
 import { Principal } from "./auth";
-import { PasswordResetDto, PasswordResetRequestDto, SignInDto } from "./dto";
+import {
+  EmailVerificationDto,
+  EmailVerificationRequestDto,
+  PasswordResetDto,
+  PasswordResetRequestDto,
+  RegistrationDto,
+  SignInDto,
+} from "./dto";
 import { PasswordRecoveryMailer } from "./password-recovery-mailer.service";
 
 @Injectable()
@@ -28,6 +38,8 @@ export class AuthService {
     @InjectRepository(AuthSession) private sessions: Repository<AuthSession>,
     @InjectRepository(PasswordResetToken)
     private resetTokens: Repository<PasswordResetToken>,
+    @InjectRepository(EmailVerificationToken)
+    private verificationTokens: Repository<EmailVerificationToken>,
     private jwt: JwtService,
     private readonly mailer: PasswordRecoveryMailer,
   ) {}
@@ -40,6 +52,18 @@ export class AuthService {
     { count: number; reset: number }
   >();
   private readonly resetEmailAttempts = new Map<
+    string,
+    { count: number; reset: number }
+  >();
+  private readonly registrationAttempts = new Map<
+    string,
+    { count: number; reset: number }
+  >();
+  private readonly verificationIpAttempts = new Map<
+    string,
+    { count: number; reset: number }
+  >();
+  private readonly verificationEmailAttempts = new Map<
     string,
     { count: number; reset: number }
   >();
@@ -93,6 +117,8 @@ export class AuthService {
       !(await bcrypt.compare(body.password ?? "", user.passwordHash))
     )
       throw new BadRequestException("Invalid email or password");
+    if (!user.emailVerifiedAt)
+      throw new ForbiddenException("Verify your email before signing in");
     const roles = (await this.roles.findBy({ userId: user.id })).map(
       (x) => x.role,
     );
@@ -116,6 +142,9 @@ export class AuthService {
   private tokenHash(token: string) {
     return createHash("sha256").update(token).digest("hex");
   }
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
   private consumeResetLimit(
     attempts: Map<string, { count: number; reset: number }>,
     key: string,
@@ -131,6 +160,143 @@ export class AuthService {
     entry.count++;
     attempts.set(key, entry);
     return true;
+  }
+  private async createVerificationToken(userId: string) {
+    const token = randomBytes(32).toString("base64url");
+    const now = new Date();
+    await this.verificationTokens.manager.transaction(async (manager) => {
+      await manager.getRepository(EmailVerificationToken).update(
+        { userId, usedAt: IsNull(), revokedAt: IsNull() },
+        { revokedAt: now },
+      );
+      await manager.getRepository(EmailVerificationToken).save({
+        userId,
+        tokenHash: this.tokenHash(token),
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      });
+    });
+    return token;
+  }
+  private async revokeVerificationToken(token: string) {
+    await this.verificationTokens.update(
+      { tokenHash: this.tokenHash(token), usedAt: IsNull(), revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
+  }
+  async register(body: RegistrationDto, req?: { ip?: string }) {
+    if (
+      !this.consumeResetLimit(
+        this.registrationAttempts,
+        req?.ip ?? "local",
+        10,
+        60000,
+      )
+    )
+      throw new HttpException("Too many registration attempts", 429);
+    const email = this.normalizeEmail(body.email);
+    const fullName = body.fullName.trim();
+    const passwordHash = await bcrypt.hash(body.password, 12);
+    const user = await this.users.manager
+      .transaction(async (manager): Promise<User | null> => {
+        const users = manager.getRepository(User);
+        if (await users.exist({ where: { email } })) return null;
+        const created = await users.save({ email, fullName, passwordHash });
+        await manager
+          .getRepository(UserRole)
+          .save({ userId: created.id, role: "STUDENT" });
+        await manager.getRepository(StudentProfile).save({ userId: created.id });
+        await manager.getRepository(AuditEvent).save({
+          subjectType: "USER",
+          subjectId: created.id,
+          eventType: "USER_REGISTERED",
+          actorUserId: created.id,
+          payload: {},
+        });
+        return created;
+      })
+      .catch((error: unknown) => {
+        if ((error as { code?: string }).code === "23505") return null;
+        throw error;
+      });
+    if (!user) return { ok: true };
+    const token = await this.createVerificationToken(user.id);
+    try {
+      await this.mailer.sendEmailVerification(user.email, token);
+    } catch {
+      await this.revokeVerificationToken(token);
+    }
+    return { ok: true };
+  }
+  async requestEmailVerification(
+    body: EmailVerificationRequestDto,
+    req?: { ip?: string },
+  ) {
+    const email = this.normalizeEmail(body.email);
+    if (
+      !this.consumeResetLimit(
+        this.verificationIpAttempts,
+        req?.ip ?? "local",
+        10,
+        60000,
+      )
+    )
+      throw new HttpException("Too many verification requests", 429);
+    if (
+      !this.consumeResetLimit(
+        this.verificationEmailAttempts,
+        email,
+        3,
+        30 * 60 * 1000,
+      )
+    )
+      return { ok: true };
+    const user = await this.users.findOneBy({ email });
+    if (!user || !user.isActive || user.emailVerifiedAt) return { ok: true };
+    const token = await this.createVerificationToken(user.id);
+    try {
+      await this.mailer.sendEmailVerification(user.email, token);
+    } catch {
+      await this.revokeVerificationToken(token);
+    }
+    return { ok: true };
+  }
+  async verifyEmail(body: EmailVerificationDto) {
+    const hash = this.tokenHash(body.token);
+    await this.verificationTokens.manager.transaction(async (manager) => {
+      const token = await manager.getRepository(EmailVerificationToken).findOne({
+        where: { tokenHash: hash, usedAt: IsNull(), revokedAt: IsNull() },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!token || token.expiresAt <= new Date())
+        throw new UnauthorizedException("Verification link is invalid or expired");
+      const user = await manager.getRepository(User).findOne({
+        where: { id: token.userId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!user || !user.isActive)
+        throw new UnauthorizedException("Verification link is invalid or expired");
+      const now = new Date();
+      await manager
+        .getRepository(EmailVerificationToken)
+        .update(token.id, { usedAt: now });
+      await manager.getRepository(EmailVerificationToken).update(
+        { userId: user.id, usedAt: IsNull(), revokedAt: IsNull() },
+        { revokedAt: now },
+      );
+      if (!user.emailVerifiedAt) {
+        await manager.getRepository(User).update(user.id, {
+          emailVerifiedAt: now,
+        });
+        await manager.getRepository(AuditEvent).save({
+          subjectType: "USER",
+          subjectId: user.id,
+          eventType: "EMAIL_VERIFIED",
+          actorUserId: user.id,
+          payload: {},
+        });
+      }
+    });
+    return { ok: true };
   }
   async requestPasswordReset(
     body: PasswordResetRequestDto,

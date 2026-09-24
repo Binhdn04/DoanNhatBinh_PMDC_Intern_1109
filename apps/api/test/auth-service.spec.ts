@@ -9,12 +9,14 @@ it("rejects unassigned roles and wrong credentials, throttles repeated attempts 
       email: "u@test",
       passwordHash: hash,
       isActive: true,
+      emailVerifiedAt: new Date(),
     }),
   };
   const roles = { findBy: jest.fn().mockResolvedValue([{ role: "STUDENT" }]) };
   const service = new AuthService(
     users as any,
     roles as any,
+    {} as any,
     {} as any,
     {} as any,
     {} as any,

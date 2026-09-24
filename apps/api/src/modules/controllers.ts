@@ -15,6 +15,8 @@ import { CurrentUser, Principal, Public, Roles, SessionGuard } from "./auth";
 import { AuthService } from "./auth.service";
 import {
   ApplicationDto,
+  EmailVerificationDto,
+  EmailVerificationRequestDto,
   PageDto,
   PostingDto,
   PostingQueryDto,
@@ -23,6 +25,7 @@ import {
   RoleDto,
   PasswordResetDto,
   PasswordResetRequestDto,
+  RegistrationDto,
   SignInDto,
   SkillsDto,
   TransitionDto,
@@ -38,6 +41,23 @@ export class AuthController {
     @Req() req?: { ip?: string },
   ) {
     return this.authService.signIn(body, req);
+  }
+  @Post("registrations") @Public() async register(
+    @Body() body: RegistrationDto,
+    @Req() req?: { ip?: string },
+  ) {
+    return this.authService.register(body, req);
+  }
+  @Post("email-verification-requests") @Public() async requestEmailVerification(
+    @Body() body: EmailVerificationRequestDto,
+    @Req() req?: { ip?: string },
+  ) {
+    return this.authService.requestEmailVerification(body, req);
+  }
+  @Post("email-verifications") @Public() async verifyEmail(
+    @Body() body: EmailVerificationDto,
+  ) {
+    return this.authService.verifyEmail(body);
   }
   @Post("sign-out") @UseGuards(SessionGuard) async signOut(
     @CurrentUser() p: Principal,
