@@ -17,6 +17,7 @@ describe("password recovery", () => {
         {} as any,
         tokens as any,
         {} as any,
+        {} as any,
         { sendPasswordReset: send } as any,
       ),
     };
