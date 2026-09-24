@@ -3,7 +3,8 @@ const fs = require("fs"),
 const spec = fs.readFileSync("docs/api/openapi.yaml", "utf8");
 const documented = new Set();
 let path;
-for (const line of spec.split("\n")) {
+for (const rawLine of spec.split("\n")) {
+  const line = rawLine.replace(/\r$/, "");
   const route = line.match(/^  (\/.*):$/);
   if (route) path = route[1];
   const method = line.match(/^    (get|post|put|patch|delete):$/);

@@ -73,6 +73,60 @@ paths:
           description: Not found
         '409':
           description: State conflict
+  /auth/registrations:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Register a student account and send email verification
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Registration'}
+      responses:
+        '201':
+          description: Neutral acknowledgement, regardless of email existence
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OkResponse'}
+        '429': {description: Too many requests}
+  /auth/email-verification-requests:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Request a replacement email verification link
+      operationId: requestEmailVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerificationRequest'}
+      responses:
+        '201':
+          description: Neutral acknowledgement, regardless of account state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OkResponse'}
+        '429': {description: Too many requests}
+  /auth/email-verifications:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Consume a one-time email verification link
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerification'}
+      responses:
+        '201':
+          description: Email verified; no session is created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OkResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /auth/password-reset-requests:
     post:
       tags: [Identity]
@@ -3673,6 +3727,26 @@ components:
       properties:
         token: {type: string, minLength: 32, maxLength: 512}
         password: {type: string, minLength: 12, maxLength: 128}
+    Registration:
+      type: object
+      required: [fullName, email, password]
+      additionalProperties: false
+      properties:
+        fullName: {type: string, minLength: 1, maxLength: 200}
+        email: {type: string, format: email, maxLength: 320}
+        password: {type: string, minLength: 12, maxLength: 128}
+    EmailVerificationRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+    EmailVerification:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: {type: string, minLength: 32, maxLength: 512}
     AdminMembership:
       type: object
       required: [companyId, active]
