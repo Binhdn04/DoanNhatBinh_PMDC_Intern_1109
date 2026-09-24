@@ -17,6 +17,8 @@ export class User {
   @Column({ name: "full_name" }) fullName!: string;
   @Column({ nullable: true }) phone?: string;
   @Column({ name: "is_active", default: true }) isActive!: boolean;
+  @Column({ name: "email_verified_at", type: "timestamptz", nullable: true })
+  emailVerifiedAt?: Date | null;
   @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
   @UpdateDateColumn({ name: "updated_at" }) updatedAt!: Date;
 }
@@ -45,6 +47,18 @@ export class PasswordResetToken {
   usedAt?: Date;
   @Column({ name: "revoked_at", type: "timestamptz", nullable: true })
   revokedAt?: Date;
+  @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
+}
+@Entity("email_verification_tokens")
+export class EmailVerificationToken {
+  @PrimaryGeneratedColumn("uuid") id!: string;
+  @Column({ name: "user_id", type: "uuid" }) userId!: string;
+  @Column({ name: "token_hash", length: 64, unique: true }) tokenHash!: string;
+  @Column({ name: "expires_at", type: "timestamptz" }) expiresAt!: Date;
+  @Column({ name: "used_at", type: "timestamptz", nullable: true })
+  usedAt?: Date | null;
+  @Column({ name: "revoked_at", type: "timestamptz", nullable: true })
+  revokedAt?: Date | null;
   @CreateDateColumn({ name: "created_at" }) createdAt!: Date;
 }
 @Entity("student_profiles")
@@ -461,6 +475,7 @@ export const entities = [
   User,
   AuthSession,
   PasswordResetToken,
+  EmailVerificationToken,
   StudentProfile,
   Company,
   Posting,

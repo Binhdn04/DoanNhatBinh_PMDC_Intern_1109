@@ -9,6 +9,7 @@ import { PrepareCanonicalCutover1770000002500 } from "./migrations/1770000002500
 import { CompleteCanonicalSchema1770000003000 } from "./migrations/1770000003000-complete-canonical-schema";
 import { Integrity1770000004000 } from "./migrations/1770000004000-integrity";
 import { AdminRecovery1770000005000 } from "./migrations/1770000005000-admin-recovery";
+import { EmailVerification1770000006000 } from "./migrations/1770000006000-email-verification";
 ConfigModule.forRoot();
 export default new DataSource({
   type: "postgres",
@@ -24,6 +25,7 @@ export default new DataSource({
     CompleteCanonicalSchema1770000003000,
     Integrity1770000004000,
     AdminRecovery1770000005000,
+    EmailVerification1770000006000,
   ],
   synchronize: false,
 });

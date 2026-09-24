@@ -27,7 +27,13 @@ export async function seed() {
     const saved: User[] = [];
     for (const [email, fullName, role] of accounts) {
       let user = await users.findOneBy({ email });
-      if (!user) user = await users.save({ email, fullName, passwordHash });
+      if (!user)
+        user = await users.save({
+          email,
+          fullName,
+          passwordHash,
+          emailVerifiedAt: new Date(),
+        });
       await roles.upsert({ userId: user.id, role }, ["userId", "role"]);
       saved.push(user);
     }

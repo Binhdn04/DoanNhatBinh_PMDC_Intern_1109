@@ -17,7 +17,7 @@ describe("data source configuration", () => {
       synchronize: false,
     });
     expect(source.options.entities.length).toBeGreaterThan(10);
-    expect(source.options.migrations).toHaveLength(7);
+    expect(source.options.migrations).toHaveLength(8);
     expect(source.options.url).toContain("postgresql://");
   });
 });
