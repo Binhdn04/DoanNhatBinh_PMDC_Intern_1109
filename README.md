@@ -8,9 +8,9 @@
 
 | Delivery status | Scope |
 | --- | --- |
-| **Implemented** | Authenticated, role-scoped workflows; API-backed web client; PostgreSQL persistence; private document transfers; in-app notifications; Admin user/membership controls; SMTP password recovery; automated checks. |
+| **Implemented** | Authenticated, role-scoped workflows; student registration with email verification; API-backed web client; PostgreSQL persistence; private document transfers; in-app notifications; Admin user/membership controls; SMTP password recovery; automated checks. |
 | **Partial** | No other partial product capability is currently identified. |
-| **Deferred** | Optional AI worker and UI controls, registration, token refresh, and multi-instance scheduler deployment. AI endpoints return 503. |
+| **Deferred** | Optional AI worker and UI controls, token refresh, and multi-instance scheduler deployment. AI endpoints return 503. |
 
 ## Product
 
@@ -109,7 +109,7 @@ Read the [architecture overview](docs/architecture/README.md), [C4 views](docs/a
 
 ## API and data
 
-The supported API contains **59 implemented REST operations**. It covers identity and health, student profile/discovery, postings/applications, placements/reports/evaluations, private documents, notifications, and monitoring. The complete, generated-contract source is [docs/api/openapi.yaml](docs/api/openapi.yaml); [target-openapi.yaml](docs/api/target-openapi.yaml) is a non-supported design proposal.
+The supported API contains **69 implemented REST operations**. It covers identity and health, verified student registration, student profile/discovery, postings/applications, placements/reports/evaluations, private documents, notifications, and monitoring. The complete, generated-contract source is [docs/api/openapi.yaml](docs/api/openapi.yaml); [target-openapi.yaml](docs/api/target-openapi.yaml) is a non-supported design proposal.
 
 ~~~mermaid
 flowchart LR

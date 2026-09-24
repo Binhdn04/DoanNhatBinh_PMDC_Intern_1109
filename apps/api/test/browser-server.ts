@@ -41,6 +41,7 @@ async function start() {
       email: `${role.toLowerCase()}@example.test`,
       fullName: role,
       passwordHash,
+      emailVerifiedAt: new Date(),
     });
     await db.getRepository(UserRole).save({ userId: user.id, role });
     if (role === "COMPANY_STAFF") staffId = user.id;

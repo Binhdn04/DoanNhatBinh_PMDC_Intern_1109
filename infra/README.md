@@ -17,7 +17,7 @@ The example nginx configuration proxies `/api` to `api:3000`; place both contain
 
 Set `NODE_ENV=production`, independent random `JWT_SECRET` and `UPLOAD_TOKEN_SECRET` values of at least 32 characters, `DATABASE_URL`, `WEB_ORIGIN`, and non-default MinIO credentials. Configure MinIO TLS and port explicitly. Production startup rejects missing required configuration and default storage credentials. The storage account needs bucket/object operations for the configured private bucket; keep the bucket non-public. Rotate keys by invalidating sessions and issuing new tokens. Do not run the demo seed.
 
-Run migrations as an explicit release step before starting the new API, using the same code and environment as the release. The runtime image contains source and migration tooling for `pnpm db:migrate`. Probe `/api/v1/health`: non-200 means the database, bucket or deadline scanner is unavailable/stale. Investigate structured API errors and scheduler logs. Do not enable AI endpoints: no worker is supplied.
+Run migrations as an explicit release step before starting the new API, using the same code and environment as the release. The runtime image contains source and migration tooling for `pnpm db:migrate`. SMTP, `MAIL_FROM`, and `APP_BASE_URL` are required for password recovery and student email verification; set `APP_BASE_URL` to the public web origin so emailed links resolve correctly. Probe `/api/v1/health`: non-200 means the database, bucket or deadline scanner is unavailable/stale. Investigate structured API errors and scheduler logs. Do not enable AI endpoints: no worker is supplied.
 
 ## Backup and restore rehearsal
 

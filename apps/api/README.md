@@ -10,7 +10,7 @@ pnpm db:seed
 pnpm dev:api
 ```
 
-The API is at `http://localhost:3000/api/v1`. `GET /health` checks PostgreSQL, storage and scheduler health; a dependency failure returns 503. Scheduler readiness may take its first one-minute scan. Sign in with the development accounts listed in the root README. Bearer tokens must have a live matching session and expire after seven days; switching roles replaces the token. There is no refresh endpoint.
+The API is at `http://localhost:3000/api/v1`. `GET /health` checks PostgreSQL, storage and scheduler health; a dependency failure returns 503. Scheduler readiness may take its first one-minute scan. Students can register through `POST /auth/registrations` and must consume the emailed verification link before signing in. Staff, supervisors, and administrators remain administrator-provisioned. Bearer tokens must have a live matching session and expire after seven days; switching roles replaces the token. There is no refresh endpoint.
 
 Controllers translate HTTP requests into service commands. Concrete DTOs reject extra fields. `AccessService` enforces company membership, student ownership and active supervisor assignment. Services recheck mutable state inside transactions. The API imports pure rules from `packages/domain`; shared wire models and generated route types live in `packages/contracts`.
 

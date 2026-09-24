@@ -20,7 +20,7 @@ try {
   await postgres.start();
   await postgres.createDatabase("internhub_test");
   const child = spawn(
-    "pnpm",
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
     [
       "--filter",
       "@internhub/api",
@@ -33,6 +33,7 @@ try {
     ],
     {
       stdio: "inherit",
+      shell: process.platform === "win32",
       env: {
         ...process.env,
         NODE_ENV: "test",

@@ -17,10 +17,13 @@ import {
   CompanyStaff,
   SupervisorProfile,
   AuthSession,
+  AuditEvent,
+  StudentProfile,
 } from "../../src/infrastructure/database/entities";
 import { ApiModule } from "../../src/modules/api.module";
 import { ProblemFilter } from "../../src/modules/problem.filter";
 import { PrivateStorageService } from "../../src/modules/private-storage.service";
+import { PasswordRecoveryMailer } from "../../src/modules/password-recovery-mailer.service";
 
 let app: INestApplication, db: DataSource, origin: string;
 const tokens: Record<string, string> = {},
@@ -33,6 +36,7 @@ let companyId: string,
   versionId: string,
   cvId: string;
 const bytes = new Map<string, Buffer>();
+const verificationEmails: Array<{ email: string; token: string }> = [];
 const storage = {
   onModuleInit: async () => {},
   ready: async () => true,
@@ -98,6 +102,12 @@ beforeAll(async () => {
   });
   if (process.env.MINIO_INTEGRATION !== "1")
     builder.overrideProvider(PrivateStorageService).useValue(storage);
+  builder.overrideProvider(PasswordRecoveryMailer).useValue({
+    sendPasswordReset: async () => {},
+    sendEmailVerification: async (email: string, token: string) => {
+      verificationEmails.push({ email, token });
+    },
+  });
   const module = await builder.compile();
   app = module.createNestApplication();
   app.setGlobalPrefix("api/v1");
@@ -125,6 +135,7 @@ beforeAll(async () => {
       email: `${key}@example.test`,
       fullName: key,
       passwordHash: hash,
+      emailVerifiedAt: new Date(),
     });
     ids[key] = user.id;
     await db
@@ -184,6 +195,31 @@ it("validates real HTTP bodies and rejects unknown entity fields", async () => {
       })
     ).status,
   ).toBe(503);
+});
+it("registers, verifies, and signs in a student without exposing duplicate accounts", async () => {
+  const email = "new.student@example.test";
+  const body = {
+    fullName: "New Student",
+    email: " NEW.STUDENT@example.test ",
+    password: "A secure student password",
+  };
+  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(201);
+  expect((await request("", "/auth/registrations", "POST", body)).status).toBe(201);
+  const user = await db.getRepository(User).findOneByOrFail({ email });
+  expect(user.emailVerifiedAt).toBeNull();
+  expect(await db.getRepository(UserRole).exist({ where: { userId: user.id, role: "STUDENT" } })).toBe(true);
+  expect(await db.getRepository(StudentProfile).exist({ where: { userId: user.id } })).toBe(true);
+  expect(await db.getRepository(AuditEvent).exist({ where: { subjectId: user.id, eventType: "USER_REGISTERED" } })).toBe(true);
+  expect((await request("", "/auth/sign-in", "POST", { email, password: body.password })).status).toBe(403);
+  const first = verificationEmails.at(-1)!;
+  expect((await request("", "/auth/email-verification-requests", "POST", { email })).status).toBe(201);
+  const second = verificationEmails.at(-1)!;
+  expect(second.token).not.toBe(first.token);
+  expect((await request("", "/auth/email-verifications", "POST", { token: first.token })).status).toBe(401);
+  expect((await request("", "/auth/email-verifications", "POST", { token: second.token })).status).toBe(201);
+  expect((await request("", "/auth/email-verifications", "POST", { token: second.token })).status).toBe(401);
+  expect((await request("", "/auth/sign-in", "POST", { email, password: body.password })).status).toBe(201);
+  expect(await db.getRepository(AuditEvent).exist({ where: { subjectId: user.id, eventType: "EMAIL_VERIFIED" } })).toBe(true);
 });
 it("publishes a posting and protects draft visibility and IDs", async () => {
   const body = {
@@ -677,6 +713,7 @@ it("keeps one active Admin when concurrent account changes target each other", a
     email: "second-admin@example.test",
     fullName: "second admin",
     passwordHash: hash,
+    emailVerifiedAt: new Date(),
   });
   await db.getRepository(UserRole).save({ userId: second.id, role: "ADMIN" });
   const login = await request("", "/auth/sign-in", "POST", {
