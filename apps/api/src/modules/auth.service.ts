@@ -107,7 +107,6 @@ export class AuthService {
     };
   }
   async signIn(body: SignInDto, req?: { ip?: string }) {
-    this.checkRate(req?.ip ?? "local");
     const user = await this.users.findOneBy({
       email: body.email?.trim().toLowerCase(),
     });
@@ -115,8 +114,10 @@ export class AuthService {
       !user ||
       !user.isActive ||
       !(await bcrypt.compare(body.password ?? "", user.passwordHash))
-    )
+    ) {
+      this.checkRate(req?.ip ?? "local");
       throw new BadRequestException("Invalid email or password");
+    }
     if (!user.emailVerifiedAt)
       throw new ForbiddenException("Verify your email before signing in");
     const roles = (await this.roles.findBy({ userId: user.id })).map(
